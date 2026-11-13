@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FailureKind, ModelHealth, RunEvent, RunMode } from '../shared/types';
 import type { AgentSpec, TrueForgeClientLike } from './client';
+import { sessionMetadata } from './namedAgent';
 import type { AgentRef } from './namedAgent';
 import { classifyFailure, describeFailure, isFallbackEligible, isRetryable, ModelUnavailableError } from './errors';
 import { consumeTurn, TurnRunner } from './turnRunner';
@@ -36,6 +37,11 @@ export interface RunRequest {
   pick?: string;
   runId?: string;
   previousTurnId?: string;
+  /**
+   * Follow-up message: post the turn to this session on the first attempt (TrueForge keeps its history).
+   * Falling back to another model starts a new session, since a session's model is fixed.
+   */
+  session?: { id: string; model?: string };
   /** Called once per attempt as soon as the turn id is known; needed to send approvals via client.approve. */
   onTurn?: (info: { sessionId: string; turnId: string; model: string }) => void;
 }
@@ -107,7 +113,12 @@ export class ModelRouter {
     const runId = req.runId ?? randomUUID();
     const { signal } = req;
     const emit = (ev: RunEvent) => req.onEvent(ev);
-    const models = this.order(req.pick);
+    let models = this.order(req.pick);
+    if (req.session) {
+      const m = req.session.model;
+      const first = m && models.includes(m) ? m : models[0];
+      if (first) models = [first, ...models.filter((x) => x !== first)];
+    }
     const tried: Attempt[] = [];
 
     const finish = (status: RunResult['status'], extra: Partial<RunResult> = {}, message?: string): RunResult => {
@@ -127,7 +138,7 @@ export class ModelRouter {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (signal?.aborted) return finish('cancelled', { model }, 'Cancelled');
 
-        const outcome = await this.attemptOnce(model, req, runId, emit);
+        const outcome = await this.attemptOnce(model, req, runId, emit, mi === 0 && !!req.session);
         if (outcome.type === 'done') {
           this.mark(model, 'ok');
           emit(outcome.done);
@@ -186,6 +197,7 @@ export class ModelRouter {
     req: RunRequest,
     runId: string,
     emit: (ev: RunEvent) => void,
+    reuse = false,
   ): Promise<
     | { type: 'done'; done: Extract<RunEvent, { kind: 'done' }>; sessionId: string; turnId?: string }
     | { type: 'cancelled'; done: Extract<RunEvent, { kind: 'done' }>; sessionId?: string; turnId?: string }
@@ -194,14 +206,22 @@ export class ModelRouter {
     const { signal } = req;
     let sessionId: string;
     try {
-      sessionId = (await this.client.createSession(req.buildSpec(model), req.agent)).id;
+      sessionId = reuse
+        ? req.session!.id
+        : (
+            await this.client.createSession(
+              req.buildSpec(model),
+              req.agent,
+              sessionMetadata(req.mode),
+            )
+          ).id;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       if (e instanceof ModelUnavailableError) return { type: 'failure', kind: 'unknownModel', message };
       return { type: 'failure', kind: classifyFailure(message), message };
     }
     if (signal?.aborted) {
-      this.client.cancel(sessionId).catch(() => undefined);
+      if (!reuse) this.client.cancel(sessionId).catch(() => undefined);
       return { type: 'cancelled', done: { kind: 'done', runId, status: 'cancelled', message: 'Cancelled' }, sessionId };
     }
 

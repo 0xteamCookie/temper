@@ -24,8 +24,11 @@ import { computeModelView, TrueForgeConnection } from './trueforgeConnection';
 import type { AgentDef, ConnectionClient } from './trueforgeConnection';
 import { agentRef, buildSpec, loadSpecTemplate } from './specs';
 import { VscodeFileSystem, workspaceRootPath } from './vscodeAdapters';
+import { SessionCoordinator } from './sessionCoordinator';
+import { SessionHistory } from './sessionHistory';
 
 const BUDGET_KEY = 'temper.budgetTokens';
+const SESSION_KEY = 'temper.sessionId';
 
 /** Delegates to the current TrueForgeClient so a changed base URL does not require rebuilding everything. */
 class ClientProxy implements ConnectionClient {
@@ -42,8 +45,23 @@ class ClientProxy implements ConnectionClient {
   upsertAgent(name: string, description: string, manifest: AgentSpec) {
     return this.inner.upsertAgent(name, description, manifest);
   }
-  createSession(spec: AgentSpec, agent?: AgentRef) {
-    return this.inner.createSession(spec, agent);
+  createSession(spec: AgentSpec, agent?: AgentRef, metadata?: Record<string, string>) {
+    return this.inner.createSession(spec, agent, metadata);
+  }
+  getAgentId(name: string) {
+    return this.inner.getAgentId(name);
+  }
+  listSessions(opts: Parameters<TrueForgeClient['listSessions']>[0]) {
+    return this.inner.listSessions(opts);
+  }
+  listTurns(sessionId: string) {
+    return this.inner.listTurns(sessionId);
+  }
+  listSessionEvents(sessionId: string) {
+    return this.inner.listSessionEvents(sessionId);
+  }
+  setSessionTitle(sessionId: string, title: string) {
+    return this.inner.setSessionTitle(sessionId, title);
   }
   streamTurn(sessionId: string, text: string, opts?: StreamOptions): AsyncIterable<RawEvent> {
     return this.inner.streamTurn(sessionId, text, opts);
@@ -78,6 +96,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   private readonly connection: TrueForgeConnection;
   private readonly editorReview: EditorReview;
   private readonly controller: RunController;
+  private readonly sessions: SessionCoordinator;
   private readonly engine: ContextEngine | undefined;
   private mcp: RunningMcpServer | undefined;
   private postFn: ((m: HostMessage) => void) | undefined;
@@ -120,6 +139,18 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       workspace,
       fsPort,
       getBudget: () => this.budget(),
+      onSession: (info) => this.sessions.onSession(info),
+    });
+    this.sessions = new SessionCoordinator({
+      history: new SessionHistory(this.client, agentRef('agent').name),
+      controller: this.controller,
+      store: {
+        get: () => this.context.workspaceState.get<string>(SESSION_KEY),
+        set: (id) => void this.context.workspaceState.update(SESSION_KEY, id),
+      },
+      post: (m) => this.send(m),
+      setTitle: (id, title) => this.client.setSessionTitle(id, title),
+      log: (l) => this.log(l),
     });
     this.workspace = workspace;
 
@@ -397,6 +428,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.postModels();
         this.controller.postCheckpoints();
         void this.connection.check();
+        void this.sessions.restore();
         break;
       case 'chat.send':
         if (msg.mode === 'edit') void this.runEditFromChat(msg.text, msg.selection);
@@ -452,7 +484,17 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         );
         break;
       case 'openSession':
-        void this.openSession();
+        void this.openSession(msg.sessionId);
+        break;
+      case 'history.list':
+        void this.sessions.list(msg.pageToken);
+        break;
+      case 'session.load':
+        void this.sessions.load(msg.id);
+        break;
+      case 'session.new':
+        if (!this.sessions.newChat())
+          this.notify('warn', 'Stop the current run before starting a new chat.');
         break;
     }
   }
@@ -645,8 +687,12 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     await vscode.workspace.getConfiguration('temper').update(mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit', pick.label, vscode.ConfigurationTarget.Global);
   }
 
-  async openSession(): Promise<void> {
-    const id = this.controller.active?.turn?.sessionId ?? this.lastSessionId;
+  async openSession(sessionId?: string): Promise<void> {
+    const id =
+      sessionId ??
+      this.controller.active?.turn?.sessionId ??
+      this.controller.session?.id ??
+      this.lastSessionId;
     const url = id ? `${this.baseUrl}/sessions/${encodeURIComponent(id)}` : this.baseUrl;
     await vscode.env.openExternal(vscode.Uri.parse(url));
   }

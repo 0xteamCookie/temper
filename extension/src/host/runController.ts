@@ -71,6 +71,8 @@ export interface RunControllerDeps {
   /** File access for applying accepted hunks; the extension supplies a WorkspaceEdit-backed port. */
   fsPort: FileSystemPort;
   getBudget?(): number;
+  /** The conversation moved to another session. `isNew`: this run created it. */
+  onSession?(info: { sessionId: string; model: string; isNew: boolean; label: string }): void;
   /** Override for tests. */
   loadSpec?: typeof loadSpecTemplate;
 }
@@ -125,6 +127,8 @@ function reviewFiles(cs: { files(): FileChange[] }): FileChange[] {
 
 export class RunController {
   active: ActiveRun | undefined;
+  /** The agent-mode session the next message continues (TrueForge keeps its history). */
+  session: { id: string; model?: string } | undefined;
   private leftover: ChangesetStore | undefined;
   private readonly bridge: ApprovalBridge;
   private readonly router: ModelRouter;
@@ -163,6 +167,11 @@ export class RunController {
 
   get isRunning(): boolean {
     return this.active !== undefined;
+  }
+
+  /** Continue `session` with the next agent message, or start a new chat when undefined. */
+  setSession(session: { id: string; model?: string } | undefined): void {
+    this.session = session;
   }
 
   modelHealth() {
@@ -249,8 +258,18 @@ export class RunController {
         onEvent: (ev) => this.onEvent(run, ev),
         pick: pick || undefined,
         runId,
+        session: opts.mode === 'agent' ? this.session : undefined,
         onTurn: (info) => {
           run.turn = info;
+          if (opts.mode !== 'agent') return;
+          const isNew = info.sessionId !== this.session?.id;
+          this.session = { id: info.sessionId, model: info.model };
+          this.deps.onSession?.({
+            sessionId: info.sessionId,
+            model: info.model,
+            isNew,
+            label: run.label,
+          });
         },
       });
     } catch (e) {

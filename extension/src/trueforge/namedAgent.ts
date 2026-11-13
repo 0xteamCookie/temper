@@ -34,3 +34,8 @@ export async function createSessionPreferNamed(
     return api.createSessionInline(spec);
   }
 }
+
+/** Metadata Temper stamps on the sessions it creates; History filters on it (inline edits stay hidden). */
+export function sessionMetadata(mode: 'agent' | 'inline'): Record<string, string> {
+  return { app: 'temper', mode };
+}

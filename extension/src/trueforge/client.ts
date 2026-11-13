@@ -32,7 +32,12 @@ export interface StreamOptions {
 /** The surface used by TurnRunner / ModelRouter; implemented by TrueForgeClient and by test fakes. */
 export interface TrueForgeClientLike {
   /** With `agent`, the session is created by that registered agent's name (falls back to an inline spec). */
-  createSession(spec: AgentSpec, agent?: AgentRef): Promise<{ id: string }>;
+  /** `metadata` is stored on the session (Temper stamps its sessions so History can find them). */
+  createSession(
+    spec: AgentSpec,
+    agent?: AgentRef,
+    metadata?: Record<string, string>,
+  ): Promise<{ id: string }>;
   streamTurn(sessionId: string, text: string, opts?: StreamOptions): AsyncIterable<RawEvent>;
   subscribe(sessionId: string, turnId: string, afterEventId?: string, signal?: AbortSignal): AsyncIterable<RawEvent>;
   approve(sessionId: string, turnId: string, threadId: string, toolCallId: string, decision: ApprovalDecision): Promise<void>;
@@ -196,14 +201,95 @@ export class TrueForgeClient implements TrueForgeClientLike {
     this.lastManifest.set(name, sig);
   }
 
+  /* ---------------- session history (plain HTTP, snake_case) ---------------- */
+
+  async getAgentId(name: string): Promise<string | undefined> {
+    return (await this.getAgent(name))?.id;
+  }
+
+  async listSessions(opts: {
+    pageToken?: string;
+    limit?: number;
+    agentId?: string;
+    metadata?: Record<string, string>;
+  }): Promise<{ sessions: unknown[]; nextPageToken?: string }> {
+    const q = new URLSearchParams({ limit: String(Math.min(opts.limit ?? 25, 25)), order: 'desc' });
+    if (opts.pageToken) q.set('page_token', opts.pageToken);
+    if (opts.agentId) q.set('agent_id', opts.agentId);
+    for (const [k, v] of Object.entries(opts.metadata ?? {})) q.set(`metadata[${k}]`, v);
+    const { status, data } = await this.http('GET', `/api/v1/sessions?${q}`);
+    if (status !== 200) this.failHttp('List sessions', status, data);
+    const rows = rec(data).data;
+    const next = rec(rec(data).pagination).next_page_token;
+    return {
+      sessions: Array.isArray(rows) ? rows : [],
+      nextPageToken: typeof next === 'string' && next ? next : undefined,
+    };
+  }
+
+  /** Follow `next_page_token` until exhausted (bounded). */
+  private async listAll(
+    path: string,
+    what: string,
+    query: Record<string, string>,
+    maxPages: number,
+  ): Promise<unknown[]> {
+    const out: unknown[] = [];
+    let token: string | undefined;
+    for (let page = 0; page < maxPages; page++) {
+      const q = new URLSearchParams(query);
+      if (token) q.set('page_token', token);
+      const { status, data } = await this.http('GET', `${path}?${q}`);
+      if (status !== 200) this.failHttp(what, status, data);
+      const rows = rec(data).data;
+      if (Array.isArray(rows)) out.push(...rows);
+      const next = rec(rec(data).pagination).next_page_token;
+      if (typeof next !== 'string' || !next) break;
+      token = next;
+    }
+    return out;
+  }
+
+  listTurns(sessionId: string): Promise<unknown[]> {
+    return this.listAll(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/turns`,
+      'List turns',
+      { limit: '25' },
+      40,
+    );
+  }
+
+  /** Session events, newest first (deltas are already merged server side). */
+  listSessionEvents(sessionId: string): Promise<unknown[]> {
+    return this.listAll(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/events`,
+      'List session events',
+      {},
+      60,
+    );
+  }
+
+  async setSessionTitle(sessionId: string, title: string): Promise<void> {
+    const { status, data } = await this.http(
+      'PATCH',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}`,
+      { title },
+    );
+    if (status < 200 || status >= 300) this.failHttp('Title session', status, data);
+  }
+
   /* ---------------- sessions and turns (SDK) ---------------- */
 
-  createSession(spec: AgentSpec, agent?: AgentRef): Promise<{ id: string }> {
+  createSession(
+    spec: AgentSpec,
+    agent?: AgentRef,
+    metadata?: Record<string, string>,
+  ): Promise<{ id: string }> {
     return createSessionPreferNamed(
       {
         upsertAgent: (n, d, m) => this.upsertAgent(n, d, m),
-        createSessionByName: (n) => this.createSessionWith({ name: n }, spec),
-        createSessionInline: (sp) => this.createSessionWith({ spec: sp }, sp),
+        createSessionByName: (n) => this.createSessionWith({ name: n }, spec, metadata),
+        createSessionInline: (sp) => this.createSessionWith({ spec: sp }, sp, metadata),
       },
       agent,
       spec,
@@ -215,9 +301,9 @@ export class TrueForgeClient implements TrueForgeClientLike {
     );
   }
 
-  private async createSessionWith(agent: { name: string } | { spec: AgentSpec }, spec: AgentSpec): Promise<{ id: string }> {
+  private async createSessionWith(agent: { name: string } | { spec: AgentSpec }, spec: AgentSpec, metadata?: Record<string, string>): Promise<{ id: string }> {
     try {
-      const res: unknown = await this.sdk.sessions.create({ agent } as unknown as Parameters<SessionsApi['create']>[0]);
+      const res: unknown = await this.sdk.sessions.create({ agent, ...(metadata ? { metadata } : {}) } as unknown as Parameters<SessionsApi['create']>[0]);
       const id = rec(rec(res).data).id ?? rec(res).id;
       if (!id) throw new TrueForgeError('TrueForge returned no session id');
       return { id: id as string };

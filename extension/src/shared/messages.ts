@@ -6,6 +6,7 @@ import type {
   ModelInfo,
   RunEvent,
 } from './types';
+import type { SessionSummary, TranscriptTurn } from './sessions';
 
 export interface Mention {
   kind: 'file' | 'symbol';
@@ -34,7 +35,20 @@ export type HostMessage =
   /** Current editor selection (null when there is no non-empty selection in a workspace file). Debounced. */
   | { type: 'editor.selection'; selection: EditorSelection | null }
   /** Focus the composer, optionally pinning a selection and switching mode (from "Add Selection to Chat"). */
-  | { type: 'composer.focus'; selection?: EditorSelection; mode?: ComposerMode; text?: string };
+  | { type: 'composer.focus'; selection?: EditorSelection; mode?: ComposerMode; text?: string }
+  /** A page of the session history (`append` adds to the list already shown). */
+  | {
+      type: 'history.page';
+      sessions: SessionSummary[];
+      nextPageToken?: string;
+      append: boolean;
+      error?: string;
+    }
+  /** A session's transcript, to replace the chat. `notice` explains anything that could not be restored. */
+  | { type: 'session.loaded'; sessionId: string; turns: TranscriptTurn[]; notice?: string }
+  | { type: 'session.loadFailed'; sessionId: string; message: string }
+  /** The session the next message continues (undefined = a new chat). */
+  | { type: 'session.current'; sessionId?: string };
 
 /** Webview -> extension host */
 export type WebviewMessage =
@@ -53,6 +67,10 @@ export type WebviewMessage =
   | { type: 'review.openDiff'; path: string }
   | { type: 'undo.last' }
   | { type: 'mention.query'; query: string }
-  | { type: 'openSession' }
+  /** Open a session in the TrueForge UI (default: the current one). */
+  | { type: 'openSession'; sessionId?: string }
+  | { type: 'history.list'; pageToken?: string }
+  | { type: 'session.load'; id: string }
+  | { type: 'session.new' }
   /** Open a workspace file in the editor, optionally revealing a 1-based line. */
   | { type: 'open.file'; path: string; line?: number };
