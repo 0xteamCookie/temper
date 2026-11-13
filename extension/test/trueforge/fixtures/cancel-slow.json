@@ -1,0 +1,130 @@
+[
+ {
+  "type": "turn.created",
+  "id": "01m7a3sx9krnh5t6vb6fq82cmt",
+  "turnId": "01m7a3sx9cfzbb6nt9bpak9jqk",
+  "previousTurnId": null,
+  "input": [
+   {
+    "type": "user.message",
+    "content": "Read src/app.py then change it to print('bye') using propose_edit."
+   }
+  ],
+  "state": {
+   "status": "running"
+  },
+  "createdAt": "2026-11-13T09:28:47.152Z",
+  "threadId": null
+ },
+ {
+  "type": "mcp.initialize",
+  "id": "01m7a3sxacs766qx3rfs5fg4ky",
+  "createdAt": "2026-11-13T09:28:47.180Z",
+  "threadId": "main",
+  "mcpServers": [
+   {
+    "name": "spike-fs",
+    "id": "spike-fs",
+    "transportType": "streamable-http"
+   }
+  ]
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:28:47.183Z",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "model": {
+   "name": "mock/slow",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3sxaf0068jqsenxb6m4sn",
+  "content": "word "
+ },
+ {
+  "type": "turn.done",
+  "id": "01m7a3sys20f7ehmeb6egxtnhn",
+  "createdAt": "2026-11-13T09:28:48.673Z",
+  "state": {
+   "status": "cancelled",
+   "reason": "client-cancelled",
+   "completedAt": "2026-11-13T09:28:48.673Z",
+   "metrics": {
+    "totalInputTokens": 0,
+    "totalOutputTokens": 0,
+    "totalTokens": 0
+   }
+  },
+  "threadId": null
+ }
+]

@@ -1,0 +1,261 @@
+[
+ {
+  "type": "turn.created",
+  "id": "01m7a3smp4g1rjh7x5wvnwec3t",
+  "turnId": "01m7a3smnymr4kn3x060fv6d4m",
+  "previousTurnId": null,
+  "input": [
+   {
+    "type": "user.message",
+    "content": "Read src/app.py then change it to print('bye') using propose_edit."
+   }
+  ],
+  "state": {
+   "status": "running"
+  },
+  "createdAt": "2026-11-13T09:28:38.338Z",
+  "threadId": null
+ },
+ {
+  "type": "mcp.initialize",
+  "id": "01m7a3smpvgz6fmbrdbcz377mj",
+  "createdAt": "2026-11-13T09:28:38.363Z",
+  "threadId": "main",
+  "mcpServers": [
+   {
+    "name": "spike-fs",
+    "id": "spike-fs",
+    "transportType": "streamable-http"
+   }
+  ]
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:28:38.366Z",
+  "id": "01m7a3smpydnzdeshgcqkc8t67",
+  "model": {
+   "name": "mock/tool",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smpydnzdeshgcqkc8t67",
+  "toolCalls": [
+   {
+    "toolInfo": {
+     "type": "mcp",
+     "name": "read_file",
+     "serverId": "spike-fs",
+     "serverName": "spike-fs"
+    },
+    "index": 0,
+    "id": "call_read1",
+    "type": "function",
+    "function": {
+     "name": "read_file",
+     "arguments": ""
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smpydnzdeshgcqkc8t67",
+  "toolCalls": [
+   {
+    "index": 0,
+    "function": {
+     "arguments": "{\"path\":\"src/app.py\"}"
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smpydnzdeshgcqkc8t67",
+  "finishReason": "tool_calls"
+ },
+ {
+  "toolCallId": "call_read1",
+  "content": "# src/app.py\nprint('hello')\n",
+  "type": "tool.response",
+  "id": "01m7a3smqf6k6hg61qbfa9h4yw",
+  "createdAt": "2026-11-13T09:28:38.383Z",
+  "threadId": "main"
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:28:38.386Z",
+  "id": "01m7a3smqjewentk9xa1ra3dpv",
+  "model": {
+   "name": "mock/tool",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smqjewentk9xa1ra3dpv",
+  "toolCalls": [
+   {
+    "toolInfo": {
+     "type": "mcp",
+     "name": "propose_edit",
+     "serverId": "spike-fs",
+     "serverName": "spike-fs"
+    },
+    "index": 0,
+    "id": "call_edit1",
+    "type": "function",
+    "function": {
+     "name": "propose_edit",
+     "arguments": ""
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smqjewentk9xa1ra3dpv",
+  "toolCalls": [
+   {
+    "index": 0,
+    "function": {
+     "arguments": "{\"path\":\"src/app.py\",\"new_content\":\"print('bye')\\n\"}"
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smqjewentk9xa1ra3dpv",
+  "finishReason": "tool_calls"
+ },
+ {
+  "type": "tool.approval_required",
+  "id": "01m7a3smqv4w7cg0jdz7h8d5hq",
+  "createdAt": "2026-11-13T09:28:38.395Z",
+  "threadId": "main",
+  "toolCalls": [
+   {
+    "id": "call_edit1",
+    "sourceEventId": "01m7a3smqjewentk9xa1ra3dpv"
+   }
+  ]
+ },
+ {
+  "type": "turn.update",
+  "id": "01m7a3smqv4w7cg0jdz7h8d5hr",
+  "state": {
+   "status": "paused",
+   "metrics": {
+    "totalInputTokens": 20,
+    "totalOutputTokens": 10,
+    "totalTokens": 30,
+    "totalCacheReadTokens": 0,
+    "totalReasoningTokens": 0
+   }
+  },
+  "createdAt": "2026-11-13T09:28:38.395Z",
+  "threadId": null
+ },
+ {
+  "type": "user.tool_approval",
+  "threadId": "main",
+  "toolCallId": "call_edit1",
+  "approval": {
+   "status": "allow"
+  },
+  "id": "01m7a3smr64actb29aemceg63w",
+  "createdAt": "2026-11-13T09:28:38.406Z"
+ },
+ {
+  "type": "turn.update",
+  "id": "01m7a3smrms9gex8ce9dznp3ae",
+  "state": {
+   "status": "running"
+  },
+  "createdAt": "2026-11-13T09:28:38.420Z",
+  "threadId": null
+ },
+ {
+  "toolCallId": "call_edit1",
+  "content": "edit to src/app.py recorded",
+  "type": "tool.response",
+  "id": "01m7a3smrvyzxngzx07907rfmh",
+  "createdAt": "2026-11-13T09:28:38.427Z",
+  "threadId": "main"
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:28:38.430Z",
+  "id": "01m7a3smrxrh9je3s9f8rebj0s",
+  "model": {
+   "name": "mock/tool",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smrxrh9je3s9f8rebj0s",
+  "content": "Done. Last tool result: edit to src/app.py recorded"
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3smrxrh9je3s9f8rebj0s",
+  "finishReason": "stop"
+ },
+ {
+  "type": "turn.done",
+  "id": "01m7a3smsabac890xcpecs9e1h",
+  "createdAt": "2026-11-13T09:28:38.442Z",
+  "state": {
+   "status": "done",
+   "output": {
+    "content": "Done. Last tool result: edit to src/app.py recorded",
+    "type": "model.message",
+    "id": "01m7a3smrxrh9je3s9f8rebj0s",
+    "createdAt": "2026-11-13T09:28:38.440Z",
+    "threadId": "main",
+    "finishReason": "stop",
+    "usage": {
+     "inputTokens": 10,
+     "outputTokens": 5,
+     "cacheReadTokens": 0,
+     "inputTokensBreakdown": {
+      "harness": 213,
+      "skills": 0,
+      "instructions": 17,
+      "toolDefinitions": 145,
+      "messages": 0
+     }
+    },
+    "model": {
+     "name": "mock/tool",
+     "params": {
+      "maxTokens": 2048
+     }
+    }
+   },
+   "requiredActions": [],
+   "completedAt": "2026-11-13T09:28:38.442Z",
+   "metrics": {
+    "totalInputTokens": 30,
+    "totalOutputTokens": 15,
+    "totalTokens": 45,
+    "totalCacheReadTokens": 0,
+    "totalReasoningTokens": 0
+   }
+  },
+  "threadId": null
+ }
+]

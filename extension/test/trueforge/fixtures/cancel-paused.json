@@ -1,0 +1,186 @@
+[
+ {
+  "type": "turn.created",
+  "id": "01m7a3t0hg922ds936y87m8n50",
+  "turnId": "01m7a3t0hcza85m7v8qq5cj14m",
+  "previousTurnId": null,
+  "input": [
+   {
+    "type": "user.message",
+    "content": "Read src/app.py then change it to print('bye') using propose_edit."
+   }
+  ],
+  "state": {
+   "status": "running"
+  },
+  "createdAt": "2026-11-13T09:28:50.477Z",
+  "threadId": null
+ },
+ {
+  "type": "mcp.initialize",
+  "id": "01m7a3t0j2y4z4pr2730p7zna4",
+  "createdAt": "2026-11-13T09:28:50.498Z",
+  "threadId": "main",
+  "mcpServers": [
+   {
+    "name": "spike-fs",
+    "id": "spike-fs",
+    "transportType": "streamable-http"
+   }
+  ]
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:28:50.500Z",
+  "id": "01m7a3t0j3gnyh7wg32jje0czm",
+  "model": {
+   "name": "mock/tool",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3t0j3gnyh7wg32jje0czm",
+  "toolCalls": [
+   {
+    "toolInfo": {
+     "type": "mcp",
+     "name": "read_file",
+     "serverId": "spike-fs",
+     "serverName": "spike-fs"
+    },
+    "index": 0,
+    "id": "call_read1",
+    "type": "function",
+    "function": {
+     "name": "read_file",
+     "arguments": ""
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3t0j3gnyh7wg32jje0czm",
+  "toolCalls": [
+   {
+    "index": 0,
+    "function": {
+     "arguments": "{\"path\":\"src/app.py\"}"
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3t0j3gnyh7wg32jje0czm",
+  "finishReason": "tool_calls"
+ },
+ {
+  "toolCallId": "call_read1",
+  "content": "# src/app.py\nprint('hello')\n",
+  "type": "tool.response",
+  "id": "01m7a3t0jpvx3rapp5cd51227j",
+  "createdAt": "2026-11-13T09:28:50.518Z",
+  "threadId": "main"
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:28:50.540Z",
+  "id": "01m7a3t0kc884sz0qrfram23yc",
+  "model": {
+   "name": "mock/tool",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3t0kc884sz0qrfram23yc",
+  "toolCalls": [
+   {
+    "toolInfo": {
+     "type": "mcp",
+     "name": "propose_edit",
+     "serverId": "spike-fs",
+     "serverName": "spike-fs"
+    },
+    "index": 0,
+    "id": "call_edit1",
+    "type": "function",
+    "function": {
+     "name": "propose_edit",
+     "arguments": ""
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3t0kc884sz0qrfram23yc",
+  "toolCalls": [
+   {
+    "index": 0,
+    "function": {
+     "arguments": "{\"path\":\"src/app.py\",\"new_content\":\"print('bye')\\n\"}"
+    }
+   }
+  ]
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3t0kc884sz0qrfram23yc",
+  "finishReason": "tool_calls"
+ },
+ {
+  "type": "tool.approval_required",
+  "id": "01m7a3t0kxs4b4e3dn28zawz7t",
+  "createdAt": "2026-11-13T09:28:50.557Z",
+  "threadId": "main",
+  "toolCalls": [
+   {
+    "id": "call_edit1",
+    "sourceEventId": "01m7a3t0kc884sz0qrfram23yc"
+   }
+  ]
+ },
+ {
+  "type": "turn.update",
+  "id": "01m7a3t0kzt47t1ccxdwz2cfdk",
+  "state": {
+   "status": "paused",
+   "metrics": {
+    "totalInputTokens": 20,
+    "totalOutputTokens": 10,
+    "totalTokens": 30,
+    "totalCacheReadTokens": 0,
+    "totalReasoningTokens": 0
+   }
+  },
+  "createdAt": "2026-11-13T09:28:50.559Z",
+  "threadId": null
+ },
+ {
+  "type": "turn.done",
+  "id": "01m7a3t213k9xfh3zzt7k1xw24",
+  "createdAt": "2026-11-13T09:28:52.003Z",
+  "state": {
+   "status": "cancelled",
+   "reason": "client-cancelled",
+   "completedAt": "2026-11-13T09:28:52.003Z",
+   "metrics": {
+    "totalInputTokens": 20,
+    "totalOutputTokens": 10,
+    "totalTokens": 30,
+    "totalCacheReadTokens": 0,
+    "totalReasoningTokens": 0
+   }
+  },
+  "threadId": null
+ }
+]

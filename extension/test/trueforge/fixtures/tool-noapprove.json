@@ -1,0 +1,116 @@
+[
+ {
+  "type": "turn.created",
+  "id": "01m7a3rane6kfwwfgafad8v7js",
+  "turnId": "01m7a3ran84x40rrm8ef41b7fv",
+  "previousTurnId": null,
+  "input": [
+   {
+    "type": "user.message",
+    "content": "Read src/app.py then change it to print('bye') using propose_edit."
+   }
+  ],
+  "state": {
+   "status": "running"
+  },
+  "createdAt": "2026-11-13T09:27:55.306Z",
+  "threadId": null
+ },
+ {
+  "type": "mcp.initialize",
+  "id": "01m7a3rap1jxt17j1njsvbp70e",
+  "createdAt": "2026-11-13T09:27:55.329Z",
+  "threadId": "main",
+  "mcpServers": [
+   {
+    "name": "spike-fs",
+    "id": "spike-fs",
+    "transportType": "streamable-http"
+   }
+  ]
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:27:55.330Z",
+  "id": "01m7a3rap2qx4ce1ngkq2w2cjv",
+  "model": {
+   "name": "mock/tool",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3rap2qx4ce1ngkq2w2cjv"
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3rap2qx4ce1ngkq2w2cjv"
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3rap2qx4ce1ngkq2w2cjv"
+ },
+ {
+  "toolCallId": "call_read1",
+  "content": "# src/app.py\nprint('hello')\n",
+  "type": "tool.response",
+  "id": "01m7a3rapmmkxapeqqzhvf4qe5",
+  "createdAt": "2026-11-13T09:27:55.347Z",
+  "threadId": "main"
+ },
+ {
+  "type": "model.message",
+  "threadId": "main",
+  "createdAt": "2026-11-13T09:27:55.350Z",
+  "id": "01m7a3rappmbqdsxpvhpydmb7y",
+  "model": {
+   "name": "mock/tool",
+   "params": {
+    "maxTokens": 2048
+   }
+  }
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3rappmbqdsxpvhpydmb7y"
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3rappmbqdsxpvhpydmb7y"
+ },
+ {
+  "type": "model.message.delta",
+  "id": "01m7a3rappmbqdsxpvhpydmb7y"
+ },
+ {
+  "type": "tool.approval_required",
+  "id": "01m7a3raq1jw684y2f3mekarq6",
+  "createdAt": "2026-11-13T09:27:55.361Z",
+  "threadId": "main",
+  "toolCalls": [
+   {
+    "id": "call_edit1",
+    "sourceEventId": "01m7a3rappmbqdsxpvhpydmb7y"
+   }
+  ]
+ },
+ {
+  "type": "turn.update",
+  "id": "01m7a3raq2ap611y24zm3szveb",
+  "state": {
+   "status": "paused",
+   "metrics": {
+    "totalInputTokens": 20,
+    "totalOutputTokens": 10,
+    "totalTokens": 30,
+    "totalCacheReadTokens": 0,
+    "totalReasoningTokens": 0
+   }
+  },
+  "createdAt": "2026-11-13T09:27:55.362Z",
+  "threadId": null
+ }
+]
