@@ -2,7 +2,7 @@
 // with the changeset's proposed files written over it, so allowlisted commands see pending edits
 // without touching the user's tree.
 import { execFile } from 'node:child_process';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, realpathSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -55,7 +55,14 @@ export class ShadowWorktree {
     private readonly fallbackWalk?: () => Promise<string[]>,
     baseDir: string = os.tmpdir(),
   ) {
-    this.dir = path.join(baseDir, `temper-shadow-${runId}`);
+    // Resolve 8.3 short names (e.g. C:\Users\PIXELN~1) so tools that compare paths see the long form.
+    let base = baseDir;
+    try {
+      base = realpathSync.native(baseDir);
+    } catch {
+      // keep the given path if it cannot be resolved
+    }
+    this.dir = path.join(base, `temper-shadow-${runId}`);
   }
 
   get fileCount(): number {

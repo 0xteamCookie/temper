@@ -134,13 +134,15 @@ export function Review({
         </span>
         <span className="spacer" />
         <button
-          className="btn btn-sm"
+          className="btn btn-sm btn-primary"
+          title="Accept every hunk and apply them now"
           onClick={() => {
             onDecideAll('accept');
             postToHost({ type: 'review.decideAll', decision: 'accept' });
+            postToHost({ type: 'review.submit' });
           }}
         >
-          Accept all
+          Accept all &amp; apply
         </button>
         <button
           className="btn btn-sm"
@@ -156,18 +158,26 @@ export function Review({
         <File key={c.path} c={c} onDecide={decide} />
       ))}
       <div className="review-foot">
-        <input
-          type="text"
-          value={reason}
-          placeholder="Reason / feedback for the agent (optional)"
-          aria-label="Review reason"
-          onChange={(e) => setReason(e.target.value)}
-        />
+        {accepted < all.length && (
+          <input
+            type="text"
+            value={reason}
+            placeholder="Tell the agent why you rejected some hunks (optional)"
+            aria-label="Feedback for the agent"
+            onChange={(e) => setReason(e.target.value)}
+          />
+        )}
         <button
           className="btn btn-primary"
+          disabled={pending > 0}
+          title={pending > 0 ? 'Accept or reject every hunk first' : undefined}
           onClick={() => postToHost({ type: 'review.submit', reason: reason.trim() || undefined })}
         >
-          Apply accepted ({accepted})
+          {pending > 0
+            ? `Decide ${pending} more hunk${pending === 1 ? '' : 's'}`
+            : accepted === 0
+              ? 'Reject all and send feedback'
+              : `Apply ${accepted} of ${all.length} hunk${all.length === 1 ? '' : 's'}`}
         </button>
       </div>
     </div>

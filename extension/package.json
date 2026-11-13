@@ -351,6 +351,13 @@
           "command": "temper.inline.cancel",
           "when": "temper.inlineDiffActive"
         }
+      ],
+      "editor/context": [
+        {
+          "command": "temper.inlineEdit",
+          "when": "editorHasSelection",
+          "group": "navigation@1"
+        }
       ]
     }
   },
