@@ -304,7 +304,11 @@ function reduceHost(state: State, m: HostMessage): State {
     case 'review.open':
       return { ...state, review: { runId: m.runId, changes: m.changes }, toast: undefined, open: { ...state.open, review: true } };
     case 'review.closed':
-      return { ...state, review: undefined, toast: { applied: m.applied, rejected: m.rejected } };
+      return {
+        ...state,
+        review: undefined,
+        toast: m.applied === 0 && m.rejected === 0 ? undefined : { applied: m.applied, rejected: m.rejected },
+      };
     case 'checkpoints.update':
       return { ...state, canUndo: m.canUndo, undoLabel: m.lastLabel };
     case 'mention.suggestions':

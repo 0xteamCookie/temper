@@ -27,6 +27,34 @@ describe('ChangesetStore', () => {
     expect(store.isEmpty()).toBe(false)
   })
 
+  it('keeps flags and decisions of unchanged hunks across later stage() calls', async () => {
+    const orig = text([...lines(30), ...lines(30, 'tail')])
+    const store = new ChangesetStore(new MemoryFileSystem({ 'a.txt': orig }))
+    await store.stage('a.txt', 'line2\n', 'LINE2\n', 'first')
+    const h0 = store.files()[0]!.hunks[0]!
+    store.setDecision(h0.id, 'accept')
+    store.addFlag(h0.id, { kind: 'outsidePlan', detail: 'x' })
+    await store.stage('a.txt', 'tail28\n', 'TAIL28\n', 'second')
+    const hunks = store.files()[0]!.hunks
+    expect(hunks).toHaveLength(2)
+    expect(hunks[0]!.decision).toBe('accept')
+    expect(hunks[0]!.flags).toHaveLength(1)
+    expect(hunks[0]!.rationale).toBe('first')
+    expect(hunks[1]!.decision).toBe('pending')
+    expect(hunks[1]!.flags).toEqual([])
+    expect(hunks[1]!.rationale).toBe('first\nsecond')
+  })
+
+  it('resets a hunk to pending when a later edit changes its content', async () => {
+    const store = new ChangesetStore(new MemoryFileSystem({ 'a.txt': text(lines(10)) }))
+    await store.stage('a.txt', 'line2\n', 'LINE2\n', 'first')
+    store.setDecision('a.txt#0', 'accept')
+    await store.stage('a.txt', 'line3\n', 'LINE3\n', 'second')
+    const hunks = store.files()[0]!.hunks
+    expect(hunks).toHaveLength(1)
+    expect(hunks[0]!.decision).toBe('pending')
+  })
+
   it('returns actionable errors', async () => {
     const store = new ChangesetStore(new MemoryFileSystem({ 'a.txt': 'hello\n' }))
     const r = await store.stage('a.txt', 'nothere', 'x')

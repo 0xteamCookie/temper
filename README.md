@@ -8,7 +8,7 @@
 
 Temper is a VS Code extension that lets a coding agent read, search and edit your project while keeping you in control of every change. The agent loop runs on TrueForge, TrueFoundry's open-source agent harness, running locally. Temper exposes editor capabilities to it as MCP tools served over HTTP on `127.0.0.1`. The extension never calls a model provider directly.
 
-> Status: early scaffold. See [Features](#features) for what exists today.
+> Status: implemented, pending live verification. See [Features](#features).
 
 ## Why Temper
 
@@ -21,18 +21,17 @@ Temper is a VS Code extension that lets a coding agent read, search and edit you
 
 ## Features
 
-| Area                                                      | Status      |
-| --------------------------------------------------------- | ----------- |
-| Extension scaffold, settings, commands, panel view        | In progress |
-| TrueForge client (sessions, streaming, cancel, approvals) | In progress |
-| MCP tool server on `127.0.0.1`                            | In progress |
-| Changeset overlay, hunk review, checkpoints               | In progress |
-| Scope Fence and Symbol Check                              | In progress |
-| Context Ledger and budgeted context packs                 | Planned     |
-| Inline edit (`Ctrl+Alt+K`) with per-hunk Accept/Reject    | Planned     |
-| Model chain with automatic fallback                       | Planned     |
-| Allowlisted commands in a shadow worktree                 | Planned     |
-| Provider registration script                              | Planned     |
+| Area                                                                 | Status                                  |
+| -------------------------------------------------------------------- | --------------------------------------- |
+| TrueForge client (streaming, cancel, approvals)                      | Implemented (pending live verification) |
+| MCP tool server on `127.0.0.1`                                       | Implemented (pending live verification) |
+| Changeset, per-hunk review, checkpoint undo                          | Implemented (pending live verification) |
+| Scope Fence and Symbol Check                                         | Implemented (pending live verification) |
+| Context Ledger and budgeted retrieval                                | Implemented (pending live verification) |
+| Inline edit (`Ctrl+Alt+K`) with per-hunk Accept/Reject               | Implemented (pending live verification) |
+| Model chain with automatic fallback                                  | Implemented (pending live verification) |
+| Allowlisted commands in a shadow copy                                | Implemented (pending live verification) |
+| Provider registration script (`node scripts/register-providers.mjs`) | Implemented (pending live verification) |
 
 ## Architecture
 
@@ -68,7 +67,7 @@ npm ci
 cp .env.example .env        # then fill in the provider keys you want to use
 
 scripts/start-trueforge.sh  # or scripts/start-trueforge.ps1 on Windows
-scripts/register-providers  # coming soon: registers providers from .env with TrueForge
+node scripts/register-providers.mjs  # registers providers from .env with TrueForge
 ```
 
 The first TrueForge start downloads the package via `npx` and can take a minute or two. The script waits until the server answers on `http://127.0.0.1:8790/`.

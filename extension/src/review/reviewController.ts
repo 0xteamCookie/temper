@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 import { InlineDiffSession } from '../inline/inlineDiff';
 import type { FileChange, HunkDecision } from '../shared/types';
 import { contentForDecisions } from './effectiveContent';
-import { ProposedContentProvider, proposedContent } from './proposedContentProvider';
+import { PROPOSED_SCHEME, ProposedContentProvider, proposedContent } from './proposedContentProvider';
 
 export interface ReviewHandlers {
   onDecide(hunkId: string, decision: HunkDecision): void;
@@ -135,11 +135,27 @@ export class ReviewController implements vscode.Disposable {
   };
 
   close(): void {
+    this.closeDiffTabs();
     this.sessions.forEach((s) => s.dispose());
     this.sessions.clear();
     if (this.runId) proposedContent.clear(this.runId);
     this.runId = undefined;
     this.changes = [];
+  }
+
+  private closeDiffTabs(): void {
+    try {
+      const isOurs = (u?: vscode.Uri) => u?.scheme === PROPOSED_SCHEME;
+      const tabs = vscode.window.tabGroups.all
+        .flatMap((g) => g.tabs)
+        .filter((t) => {
+          const i = t.input as { modified?: vscode.Uri; textDiffs?: { modified?: vscode.Uri }[] } | undefined;
+          return isOurs(i?.modified) || !!i?.textDiffs?.some((d) => isOurs(d.modified));
+        });
+      if (tabs.length) void vscode.window.tabGroups.close(tabs);
+    } catch {
+      /* tab API unavailable: leave the tabs */
+    }
   }
 
   dispose(): void {

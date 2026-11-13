@@ -188,7 +188,7 @@ export class ChangesetStore {
       original,
       proposed,
       rationale: [...(prev?.rationale ?? []), ...(rationale ? [rationale] : [])],
-      hunks: [],
+      hunks: prev?.hunks ?? [],
     }
     this.rebuildHunks(e)
     this.entries.set(np, e)
@@ -209,8 +209,21 @@ export class ChangesetStore {
         },
       ]
     }
-    e.hunks = hunks
-    for (const h of hunks) this.dropped.delete(h.id)
+    // Carry over review state for hunks whose content (old range + lines) is unchanged.
+    const key = (h: Hunk) => `${h.oldStart},${h.oldLines}\n${h.lines.join('\n')}`
+    const prev = new Map<string, Hunk>()
+    const wasDropped = new Set<string>()
+    for (const h of e.hunks) {
+      prev.set(key(h), h)
+      if (this.dropped.has(h.id)) wasDropped.add(key(h))
+      this.dropped.delete(h.id)
+    }
+    e.hunks = hunks.map((h) => {
+      const old = prev.get(key(h))
+      if (!old) return h
+      if (wasDropped.has(key(h))) this.dropped.add(h.id)
+      return { ...h, flags: old.flags, decision: old.decision, rationale: old.rationale }
+    })
   }
 
   /** Files with hunks (dropped hunks hidden). Hunk objects are live: guards may mutate flags/decision. */

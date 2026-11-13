@@ -12,9 +12,18 @@ The listing of a project here does not imply endorsement of Temper by that proje
 
 ### Files derived
 
-| Temper file | Upstream file | Upstream ref | Changes |
-| ----------- | ------------- | ------------ | ------- |
-| _Populated as code is adopted._ | | | |
+| Temper file                                                     | Upstream file                                                         | Upstream ref | Changes                                                                                            |
+| --------------------------------------------------------------- | --------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------- |
+| Temper file                                                     | Upstream file                                                         | Upstream ref | Changes                                                                                            |
+| ---                                                             | ---                                                                   | ---          | ---                                                                                                |
+| `extension/src/changeset/replacers.ts` (used by `fuzzyEdit.ts`) | `packages/opencode/src/tool/edit.ts` (replacer chain, lines ~142-640) | `v1.0.0`     | Tool glue removed; `replace()` returns a result object; strategy names added; `ts-nocheck` header. |
+
+### Upstream credits of the replacer code
+
+The opencode replacer chain credits the following Apache-2.0 sources in its own header comment. Their notices are preserved here (full Apache-2.0 text in `LICENSE`):
+
+- google-gemini/gemini-cli, `packages/core/src/utils/editCorrector.ts` (Apache-2.0, Copyright Google LLC).
+- Cline, `evals/diff-edits/diff-apply/diff-06-23-25.ts` and `diff-06-26-25.ts` (Apache-2.0, Copyright Cline Bot Inc.).
 
 ### Licence text
 
@@ -52,9 +61,11 @@ SOFTWARE.
 
 ### Files derived
 
-| Temper file | Upstream file | Upstream ref | Changes |
-| ----------- | ------------- | ------------ | ------- |
-| _Populated as code is adopted._ | | | |
+| Temper file                                                                                   | Upstream file                                          | Upstream ref                               | Changes                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Temper file                                                                                   | Upstream file                                          | Upstream ref                               | Changes                                                                                                                                                               |
+| ---                                                                                           | ---                                                    | ---                                        | ---                                                                                                                                                                   |
+| `extension/src/review/proposedContentProvider.ts`, `extension/src/review/reviewController.ts` | `VscodeDiffContentProvider.ts`, `openMultiFileDiff.ts` | `72b3d7140553a733242126e51a7c2e87efe75c64` | Re-implemented from the pattern: keyed store instead of base64 query; `vscode.changes` with sequential `vscode.diff` fallback; plain arguments instead of gRPC types. |
 
 ## continuedev/continue
 
@@ -66,6 +77,13 @@ SOFTWARE.
 
 ### Files derived
 
-| Temper file | Upstream file | Upstream ref | Changes |
-| ----------- | ------------- | ------------ | ------- |
-| _Populated as code is adopted._ | | | |
+| Temper file              | Upstream file                                                                      | Upstream ref                               | Changes                                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Temper file              | Upstream file                                                                      | Upstream ref                               | Changes                                                                                                             |
+| ---                      | ---                                                                                | ---                                        | ---                                                                                                                 |
+| `extension/src/inline/*` | `diff/vertical/handler.ts`, `decorations.ts`, `VerticalPerLineCodeLensProvider.ts` | `5522c6f44ca0ac3528b37244818fbfa39b5af470` | Design only; written from scratch (no buffer edits, ghost-text rendering). No upstream source text copied verbatim. |
+
+## Acknowledgements
+
+- opencode (MIT): the `missHint` and CRLF handling in its newer edit tool inspired Temper's equivalent behaviour. Re-implemented, no code copied.
+- Cline (Apache-2.0): the diff and checkpoint concepts informed the changeset and checkpoint design. Code is adopted only where listed above.
