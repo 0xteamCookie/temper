@@ -1,0 +1,13 @@
+node_modules
+dist
+out
+coverage
+*.vsix
+package-lock.json
+LICENSE
+CODE_OF_CONDUCT.md
+.trueforge
+.impeccable
+notes
+spike
+.vscode-test
