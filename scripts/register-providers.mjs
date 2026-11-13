@@ -6,10 +6,18 @@
 // printed, logged, or written anywhere else. The Temper extension never reads
 // these keys and never calls a model provider directly.
 //
-// Usage:  node scripts/register-providers.mjs [--env .env] [--base http://127.0.0.1:8790] [--remove name,name] [--dry-run]
+// Usage:  node scripts/register-providers.mjs [--env .env] [--base http://127.0.0.1:8790]
+//                                             [--remove name,name] [--dry-run] [--watch]
+//
+// Vertex AI (Gemini on Google Cloud) is registered as an OpenAI-compatible
+// provider. Its credential is a short-lived Google OAuth access token (~1 h),
+// minted from `gcloud auth print-access-token` or a service-account JSON.
+// `--watch` keeps running and re-registers Vertex every 45 minutes.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createSign } from 'node:crypto';
 
 const args = process.argv.slice(2);
 const opt = (flag, fallback) => {
@@ -64,6 +72,73 @@ async function api(method, path, body) {
     json = { raw: text };
   }
   return { status: res.status, json };
+}
+
+/* ----------------------------- Vertex AI ----------------------------- */
+
+const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+/** Access token from a service-account JSON (JWT bearer grant), no extra dependencies. */
+async function tokenFromServiceAccount(path) {
+  const sa = JSON.parse(readFileSync(path, 'utf8'));
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claim = b64url(
+    JSON.stringify({
+      iss: sa.client_email,
+      scope: 'https://www.googleapis.com/auth/cloud-platform',
+      aud: sa.token_uri || 'https://oauth2.googleapis.com/token',
+      iat: now,
+      exp: now + 3600,
+    }),
+  );
+  const signer = createSign('RSA-SHA256');
+  signer.update(`${header}.${claim}`);
+  const jwt = `${header}.${claim}.${b64url(signer.sign(sa.private_key))}`;
+  const res = await fetch(sa.token_uri || 'https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
+  });
+  const json = await res.json();
+  if (!json.access_token) throw new Error(`service-account token request failed (HTTP ${res.status})`);
+  return json.access_token;
+}
+
+/** Access token from the gcloud CLI (user must have run `gcloud auth login`). */
+function tokenFromGcloud() {
+  const opts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' };
+  try {
+    return execFileSync('gcloud', ['auth', 'print-access-token'], opts).trim();
+  } catch {
+    throw new Error('could not get a token from gcloud. Run `gcloud auth login` (or set VERTEX_SERVICE_ACCOUNT_JSON).');
+  }
+}
+
+async function vertexToken(env) {
+  if (env.VERTEX_SERVICE_ACCOUNT_JSON) return tokenFromServiceAccount(resolve(env.VERTEX_SERVICE_ACCOUNT_JSON));
+  return tokenFromGcloud();
+}
+
+function vertexBaseUrl(project, location) {
+  const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
+  return `https://${host}/v1/projects/${project}/locations/${location}/endpoints/openapi`;
+}
+
+/** One-token probe per model so misconfigured model ids are reported at setup time, not mid-demo. */
+async function probeVertexModel(baseUrl, token, modelId) {
+  try {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ model: modelId, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+    });
+    if (res.ok) return 'ok';
+    const body = await res.text();
+    return `HTTP ${res.status}: ${body.replace(/\s+/g, ' ').slice(0, 160)}`;
+  } catch (e) {
+    return `unreachable: ${e instanceof Error ? e.message : String(e)}`;
+  }
 }
 
 async function main() {
@@ -139,6 +214,39 @@ async function main() {
     });
   }
 
+  if (env.VERTEX_PROJECT_ID) {
+    const location = env.VERTEX_LOCATION || 'global';
+    const baseUrl = vertexBaseUrl(env.VERTEX_PROJECT_ID, location);
+    const ids = list(env.VERTEX_MODELS).length
+      ? list(env.VERTEX_MODELS)
+      : ['google/gemini-3.5-flash', 'google/gemini-3.1-pro-preview'];
+    try {
+      const token = await vertexToken(env);
+      const usable = [];
+      for (const id of ids) {
+        const result = DRY ? 'not probed (dry run)' : await probeVertexModel(baseUrl, token, id);
+        console.log(`  vertex probe ${id}: ${result}`);
+        if (DRY || result === 'ok') usable.push(id);
+      }
+      if (usable.length) {
+        providers.push({
+          type: 'custom',
+          name: 'vertex',
+          base_url: baseUrl,
+          auth: { api_key: token },
+          models: customModels(
+            usable.map((id) => `${id}|${id.replace(/^google\//, '')}`),
+            Number(env.VERTEX_CONTEXT) || 1000000,
+          ),
+        });
+      } else {
+        console.warn('- vertex: skipped (no configured model answered; check VERTEX_MODELS / project / region)');
+      }
+    } catch (e) {
+      console.warn(`- vertex: skipped (${e instanceof Error ? e.message : String(e)})`);
+    }
+  }
+
   for (const name of REMOVE) {
     if (DRY) {
       console.log(`- would remove ${name}`);
@@ -172,7 +280,19 @@ async function main() {
   console.log('\nUse these names in the Temper model router (setting: temper.models.chain).');
 }
 
-main().catch((e) => {
-  console.error(`register-providers failed: ${e instanceof Error ? e.message : String(e)}`);
-  process.exit(1);
-});
+const WATCH = args.includes('--watch');
+const REFRESH_MS = 45 * 60 * 1000;
+
+main()
+  .then(() => {
+    if (!WATCH) return;
+    console.log('\nWatching: re-registering every 45 minutes to refresh the Vertex AI token (Ctrl+C to stop).');
+    setInterval(() => {
+      console.log(`\n[${new Date().toLocaleTimeString()}] refreshing providers`);
+      main().catch((e) => console.error(`refresh failed: ${e instanceof Error ? e.message : String(e)}`));
+    }, REFRESH_MS);
+  })
+  .catch((e) => {
+    console.error(`register-providers failed: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  });
