@@ -9,6 +9,7 @@ export default tseslint.config(
       '**/out/**',
       '**/node_modules/**',
       '**/coverage/**',
+      '**/test/**/fixtures/**',
       '.trueforge/**',
       '.impeccable/**',
       'notes/**',
