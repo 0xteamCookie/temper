@@ -67,8 +67,11 @@ npm ci
 cp .env.example .env        # then fill in the provider keys you want to use
 
 scripts/start-trueforge.sh  # or scripts/start-trueforge.ps1 on Windows
-node scripts/register-providers.mjs  # registers providers from .env with TrueForge
+node scripts/register-providers.mjs --check  # optional: validate your keys (read-only)
+node scripts/register-providers.mjs  # discover models and register them with TrueForge
 ```
+
+Model provisioning has four layers: **secrets** in `.env` (keys and endpoints only), **discovery** (the script asks each provider which models your key can use), **policy** in [config/providers.json](config/providers.json) (which models you want, pinned or filtered), and **registration** into TrueForge. Use `--dry-run` to preview. See [config/README.md](config/README.md).
 
 The first TrueForge start downloads the package via `npx` and can take a minute or two. The script waits until the server answers on `http://127.0.0.1:8790/`.
 

@@ -1,0 +1,50 @@
+{
+  "$comment": "Model policy (layer 3). Which models Temper registers into TrueForge per provider. No secrets here; keys live in .env. See config/README.md.",
+  "providers": {
+    "anthropic": {
+      "enabled": true,
+      "mode": "pinned",
+      "models": ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"],
+      "max_models": 3
+    },
+    "google-gemini": {
+      "enabled": true,
+      "mode": "pinned",
+      "models": ["gemini-flash-latest", "gemini-pro-latest", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen"],
+      "max_models": 5
+    },
+    "vertex": {
+      "enabled": true,
+      "mode": "pinned",
+      "models": ["google/gemini-3.5-flash", "google/gemini-3.1-pro-preview"],
+      "max_models": 3
+    },
+    "openrouter": {
+      "enabled": true,
+      "mode": "discover",
+      "requirements": { "tools": true, "min_context": 32000 },
+      "free_tier_suffix": ":free",
+      "prefer": "context",
+      "max_models": 3
+    },
+    "groq": {
+      "enabled": true,
+      "mode": "discover",
+      "exclude": ["whisper", "guard", "orpheus", "tts", "allam", "safeguard"],
+      "requirements": { "tools": true, "min_context": 32000 },
+      "prefer": "context",
+      "max_models": 3
+    },
+    "truefoundry": {
+      "enabled": true,
+      "mode": "discover",
+      "requirements": { "min_context": 32000 },
+      "max_models": 3
+    },
+    "ollama": {
+      "enabled": true,
+      "mode": "discover",
+      "max_models": 2
+    }
+  }
+}

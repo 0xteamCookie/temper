@@ -1,8 +1,8 @@
 {
-  "$comment": "Example model configuration. Names are TrueForge model names (<provider>/<model alias>) as listed by GET /api/v1/models. Contains no keys.",
-  "chain": ["anthropic/claude-sonnet", "gemini/gemini-flash", "ollama/qwen-coder"],
-  "agentMode": "anthropic/claude-sonnet",
-  "inlineEdit": "gemini/gemini-flash",
+  "$comment": "Example Temper model settings. Names are TrueForge model names (<provider>/<alias>) as listed by GET /api/v1/models after running scripts/register-providers.mjs. Contains no keys.",
+  "chain": ["anthropic/claude-sonnet-5-5", "google-gemini/gemini-flash-latest", "groq/llama-3-3-70b-versatile"],
+  "agentMode": "anthropic/claude-sonnet-5-5",
+  "inlineEdit": "google-gemini/gemini-flash-latest",
   "fallback": {
     "enabled": true,
     "retries": 1
