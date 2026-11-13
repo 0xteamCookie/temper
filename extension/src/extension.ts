@@ -29,6 +29,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   cmd('temper.openPanel', () => vscode.commands.executeCommand('workbench.view.extension.temper'));
+  cmd('temper.addSelectionToChat', () => host.addSelectionToChat());
   cmd('temper.cancel', () => host.cancel());
   cmd('temper.undoLastChange', () => host.undoLast());
   cmd('temper.selectModel', () => host.selectModel());

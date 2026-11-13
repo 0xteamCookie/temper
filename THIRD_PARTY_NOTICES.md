@@ -14,8 +14,6 @@ The listing of a project here does not imply endorsement of Temper by that proje
 
 | Temper file                                                     | Upstream file                                                         | Upstream ref | Changes                                                                                            |
 | --------------------------------------------------------------- | --------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------- |
-| Temper file                                                     | Upstream file                                                         | Upstream ref | Changes                                                                                            |
-| ---                                                             | ---                                                                   | ---          | ---                                                                                                |
 | `extension/src/changeset/replacers.ts` (used by `fuzzyEdit.ts`) | `packages/opencode/src/tool/edit.ts` (replacer chain, lines ~142-640) | `v1.0.0`     | Tool glue removed; `replace()` returns a result object; strategy names added; `ts-nocheck` header. |
 
 ### Upstream credits of the replacer code
@@ -63,8 +61,6 @@ SOFTWARE.
 
 | Temper file                                                                                   | Upstream file                                          | Upstream ref                               | Changes                                                                                                                                                               |
 | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Temper file                                                                                   | Upstream file                                          | Upstream ref                               | Changes                                                                                                                                                               |
-| ---                                                                                           | ---                                                    | ---                                        | ---                                                                                                                                                                   |
 | `extension/src/review/proposedContentProvider.ts`, `extension/src/review/reviewController.ts` | `VscodeDiffContentProvider.ts`, `openMultiFileDiff.ts` | `72b3d7140553a733242126e51a7c2e87efe75c64` | Re-implemented from the pattern: keyed store instead of base64 query; `vscode.changes` with sequential `vscode.diff` fallback; plain arguments instead of gRPC types. |
 
 ## continuedev/continue
@@ -77,11 +73,14 @@ SOFTWARE.
 
 ### Files derived
 
-| Temper file              | Upstream file                                                                      | Upstream ref                               | Changes                                                                                                             |
-| ------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Temper file              | Upstream file                                                                      | Upstream ref                               | Changes                                                                                                             |
-| ---                      | ---                                                                                | ---                                        | ---                                                                                                                 |
-| `extension/src/inline/*` | `diff/vertical/handler.ts`, `decorations.ts`, `VerticalPerLineCodeLensProvider.ts` | `5522c6f44ca0ac3528b37244818fbfa39b5af470` | Design only; written from scratch (no buffer edits, ghost-text rendering). No upstream source text copied verbatim. |
+| Temper file              | Upstream file                                                                      | Upstream ref                               | Changes                                                                                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `extension/src/inline/*` | `diff/vertical/handler.ts`, `decorations.ts`, `VerticalPerLineCodeLensProvider.ts` | `5522c6f44ca0ac3528b37244818fbfa39b5af470` | Design only; written from scratch (proposed lines are shown in the editor buffer without saving and removed before apply). No upstream source text copied verbatim. |
+
+## Bundled dependencies
+
+- `@vscode/codicons` (Microsoft): icon font bundled into the webview. Icon font and images under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), source code under MIT. Used unmodified.
+- React and React DOM (Meta, MIT): bundled into the webview. Used unmodified.
 
 ## Acknowledgements
 

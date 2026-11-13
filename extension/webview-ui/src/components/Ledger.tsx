@@ -1,56 +1,74 @@
 import { useEffect, useRef, useState } from 'react';
-import type { LedgerEntry, LedgerSnapshot } from '../../../src/shared/types';
+import type { LedgerEntry, LedgerSnapshot, PickReason } from '../../../src/shared/types';
 import { postToHost } from '../vscode';
-import { fmtTokens } from './ui';
+import { FileLink, fmtTokens, Icon, IconButton } from './ui';
 
 const MAX_BUDGET = 64000;
 
-function Row({ e }: { e: LedgerEntry }) {
-  const label = e.symbol ? `${e.path} › ${e.symbol}` : e.path;
-  const range = e.startLine ? `:${e.startLine}${e.endLine ? `-${e.endLine}` : ''}` : '';
+export const REASON_LABEL: Record<PickReason, string> = {
+  mention: 'mention',
+  selection: 'selection',
+  symbol: 'symbol',
+  keyword: 'keyword',
+  graph: 'import',
+  testPair: 'test',
+  docsPair: 'docs',
+  agent: 'agent',
+  pinned: 'pinned',
+};
+
+export function entryLabel(e: LedgerEntry): string {
+  return e.symbol ? `${e.path} › ${e.symbol}` : e.path;
+}
+
+export function ReasonChips({ e }: { e: LedgerEntry }) {
   return (
-    <li className={`ledger-row${e.included && !e.evicted ? '' : ' excluded'}`}>
-      <div className="ledger-main">
-        <span className="ledger-path ellipsis" title={label + range}>
-          {label}
+    <span className="chips">
+      {e.reasons.map((r, i) => (
+        <span key={r.reason + i} className="chip chip-reason" title={r.detail || r.reason} tabIndex={0}>
+          {REASON_LABEL[r.reason] ?? r.reason}
         </span>
-        <span className="muted nowrap">
-          {e.tokens} tok · {e.representation}
+      ))}
+      {e.evicted && <span className="chip chip-reason">evicted</span>}
+    </span>
+  );
+}
+
+function Row({ e }: { e: LedgerEntry }) {
+  const label = entryLabel(e);
+  const off = !(e.included && !e.evicted);
+  return (
+    <li className={`ledger-row${off ? ' excluded' : ''}`}>
+      <div className="ledger-main">
+        <Icon name={e.symbol ? 'symbol-method' : 'file'} className="muted" />
+        <FileLink path={e.path} line={e.startLine} className="ellipsis grow" label={label} />
+        <span className="muted nowrap small">
+          {fmtTokens(e.tokens)} · {e.representation}
         </span>
       </div>
       <div className="ledger-sub">
-        <span className="chips">
-          {e.reasons.map((r, i) => (
-            <span key={r.reason + i} className={`chip reason reason-${r.reason}`} title={r.detail || r.reason} tabIndex={0}>
-              {r.reason}
-            </span>
-          ))}
-          {e.evicted && <span className="chip">evicted</span>}
-        </span>
+        <ReasonChips e={e} />
         <span className="row-actions">
-          <button
-            className="icon-btn"
-            aria-pressed={!!e.pinned}
-            aria-label={`${e.pinned ? 'Unpin' : 'Pin'} ${label}`}
-            title={e.pinned ? 'Unpin' : 'Pin'}
+          <IconButton
+            icon={e.pinned ? 'pinned' : 'pin'}
+            pressed={!!e.pinned}
+            label={`${e.pinned ? 'Unpin' : 'Pin'} ${label}`}
+            title={e.pinned ? 'Unpin' : 'Pin to context'}
             onClick={() => postToHost({ type: 'ledger.pin', id: e.id })}
-          >
-            {e.pinned ? '★' : '☆'}
-          </button>
-          <button
-            className="icon-btn"
-            aria-label={`Evict ${label}`}
+          />
+          <IconButton
+            icon="close"
+            label={`Evict ${label}`}
             title="Evict from context"
             onClick={() => postToHost({ type: 'ledger.evict', id: e.id })}
-          >
-            ✕
-          </button>
+          />
         </span>
       </div>
     </li>
   );
 }
 
+/** Full ledger: budget slider, every candidate with pin / evict, and the over-budget group. */
 export function Ledger({ snapshot, onBudget }: { snapshot: LedgerSnapshot; onBudget: (t: number) => void }) {
   const [budget, setBudget] = useState(snapshot.budgetTokens);
   const dirty = useRef(false);
@@ -73,32 +91,9 @@ export function Ledger({ snapshot, onBudget }: { snapshot: LedgerSnapshot; onBud
 
   const included = snapshot.entries.filter((e) => e.included && !e.evicted);
   const excluded = snapshot.entries.filter((e) => !(e.included && !e.evicted));
-  const cap = snapshot.budgetTokens || snapshot.usedTokens || 1;
-  const pct = Math.min(100, Math.round((snapshot.usedTokens / cap) * 100));
 
   return (
     <div className="ledger">
-      <div className="muted task ellipsis" title={snapshot.task}>
-        {snapshot.task}
-      </div>
-      <div
-        className="bar"
-        role="progressbar"
-        aria-label="Context budget used"
-        aria-valuemin={0}
-        aria-valuemax={cap}
-        aria-valuenow={snapshot.usedTokens}
-      >
-        <div className={`bar-fill${pct >= 90 ? ' bar-hot' : ''}`} style={{ width: `${pct}%` }} />
-      </div>
-      <div className="bar-label">
-        <span>
-          {fmtTokens(snapshot.usedTokens)} / {snapshot.budgetTokens ? fmtTokens(snapshot.budgetTokens) : 'auto'} tokens
-        </span>
-        <span className="muted">
-          {included.length} of {snapshot.candidates} candidates
-        </span>
-      </div>
       <label className="slider">
         <span>Budget: {budget === 0 ? 'Auto' : fmtTokens(budget)}</span>
         <input
@@ -111,6 +106,9 @@ export function Ledger({ snapshot, onBudget }: { snapshot: LedgerSnapshot; onBud
           onChange={(e) => change(Number(e.target.value))}
         />
       </label>
+      <div className="muted small">
+        {included.length} of {snapshot.candidates} candidates fit the budget
+      </div>
       <ul className="ledger-list" aria-label="Included context">
         {included.map((e) => (
           <Row key={e.id} e={e} />

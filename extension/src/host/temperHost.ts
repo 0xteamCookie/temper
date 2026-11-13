@@ -1,14 +1,16 @@
 // The extension-host composition root: TrueForge connection, MCP server, run controller, editor
 // review, status bar, output channel and the webview backend. Everything is async; activation never blocks.
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ContextEngine, createGetContextTool, createNodeReader } from '../context';
 import { getSettings } from '../config';
 import { startMcpServer, readOnlyTools } from '../mcp';
 import type { RunningMcpServer, TemperTool } from '../mcp';
-import { promptInstruction } from '../inline';
+import { addToHistory, promptInstruction } from '../inline';
+import { selectionToLines } from '../inline/instructionModel';
 import { TrueForgeClient } from '../trueforge';
 import type { AgentRef, AgentSpec, RawEvent, StreamOptions } from '../trueforge';
-import type { HostMessage, WebviewMessage } from '../shared/messages';
+import type { ComposerMode, EditorSelection, HostMessage, WebviewMessage } from '../shared/messages';
 import type { ApprovalDecision, ModelInfo, RunEvent } from '../shared/types';
 import type { PanelBackend } from '../panel';
 import { ChangesetWorkspace } from './changesetWorkspace';
@@ -80,6 +82,10 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   private mcp: RunningMcpServer | undefined;
   private postFn: ((m: HostMessage) => void) | undefined;
   private lastSessionId: string | undefined;
+  private webviewReady = false;
+  private readonly queued: HostMessage[] = [];
+  private lastSelection: EditorSelection | null = null;
+  private selectionTimer: ReturnType<typeof setTimeout> | undefined;
   private statusModelOverride: string | undefined;
   private readonly subs: vscode.Disposable[] = [];
   private baseUrl: string;
@@ -122,6 +128,13 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     this.status.show();
 
     this.subs.push(
+      vscode.window.onDidChangeActiveTextEditor((e) => {
+        // Focus moving to the webview makes the active editor undefined; keep the last value then.
+        if (e) this.scheduleSelection();
+      }),
+      vscode.window.onDidChangeTextEditorSelection((e) => {
+        if (e.textEditor === vscode.window.activeTextEditor) this.scheduleSelection();
+      }),
       this.connection.onChange(() => {
         this.postConnection();
         this.postModels();
@@ -369,19 +382,28 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
 
   attach(post: (m: HostMessage) => void): vscode.Disposable {
     this.postFn = post;
+    this.webviewReady = false;
     return { dispose: () => void (this.postFn === post ? (this.postFn = undefined) : undefined) };
   }
 
   handle(msg: WebviewMessage): void {
     switch (msg.type) {
       case 'ready':
+        this.webviewReady = true;
+        for (const m of this.queued.splice(0)) this.send(m);
+        this.lastSelection = this.computeSelection(vscode.window.activeTextEditor);
+        this.send({ type: 'editor.selection', selection: this.lastSelection });
         this.postConnection();
         this.postModels();
         this.controller.postCheckpoints();
         void this.connection.check();
         break;
       case 'chat.send':
-        void this.runAgent(msg.text, msg.mentions);
+        if (msg.mode === 'edit') void this.runEditFromChat(msg.text, msg.selection);
+        else void this.runAgent(msg.text, msg.mentions);
+        break;
+      case 'open.file':
+        void this.openFile(msg.path, msg.line);
         break;
       case 'run.cancel':
         this.cancel();
@@ -470,29 +492,129 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       this.notify('warn', 'A Temper run is already in progress. Stop it before starting another.');
       return;
     }
-    const r = await promptInstruction(this.context.globalState);
-    if (!r || !this.root) return;
+    const r = await promptInstruction(this.context.globalState, {
+      model: this.modelView().inlineModel,
+      onContinueInChat: (text, editor, range) => {
+        const sel = this.toEditorSelection(editor.document.uri, range.start.line + 1, range.end.line + 1);
+        if (sel) void this.addSelectionToChat(sel, text);
+      },
+      onChangeModel: () => void this.selectModel('inline'),
+    });
+    if (!r) return;
     const doc = r.editor.document;
-    const rel = vscode.workspace.asRelativePath(doc.uri, false).replace(/\\/g, '/');
-    if (doc.uri.scheme !== 'file' || rel.startsWith('..') || /^[A-Za-z]:/.test(rel)) {
+    const sel = this.toEditorSelection(doc.uri, r.range.start.line + 1, r.range.end.line + 1);
+    if (!sel) {
       this.notify('warn', 'Inline edits work on files inside the open workspace.');
       return;
     }
-    const startLine = r.range.start.line + 1;
-    const endLine = r.range.end.line + 1;
+    await this.startInlineRun(sel, r.instruction, doc.getText());
+  }
+
+  /** chat.send with mode 'edit': the inline flow with the instruction and range from the composer. */
+  private async runEditFromChat(text: string, sel: EditorSelection | undefined): Promise<void> {
+    const fail = (message: string) =>
+      this.send({ type: 'run.event', event: { kind: 'done', runId: 'none', status: 'error', message } });
+    if (!sel) return fail('Edit mode needs a selection. Select code in the editor first.');
+    if (!text.trim() || !this.requireWorkspace() || !this.requireConnection()) return fail('Could not start the run.');
+    if (this.controller.isRunning) return fail('A Temper run is already in progress.');
+    const root = this.root;
+    const abs = root ? path.resolve(root, sel.path) : '';
+    const rel = root ? path.relative(root, abs) : '';
+    if (!root || rel.startsWith('..') || path.isAbsolute(rel)) {
+      return fail('Inline edits work on files inside the open workspace.');
+    }
+    let content: string;
+    try {
+      content = (await vscode.workspace.openTextDocument(vscode.Uri.file(abs))).getText();
+    } catch {
+      return fail(`Could not read ${sel.path}.`);
+    }
+    await addToHistory(this.context.globalState, text);
+    await this.startInlineRun(sel, text.trim(), content);
+  }
+
+  private async startInlineRun(sel: EditorSelection, instruction: string, content: string): Promise<void> {
     const prompt = buildInlinePrompt({
-      path: rel,
-      instruction: r.instruction,
-      lines: doc.getText().split(/\r?\n/),
-      startLine,
-      endLine,
+      path: sel.path,
+      instruction,
+      lines: content.split(/\r?\n/),
+      startLine: sel.startLine,
+      endLine: sel.endLine,
     });
     await this.controller.start({
       mode: 'inline',
       prompt,
-      scope: { kind: 'selection', path: rel, startLine, endLine },
-      label: r.instruction,
+      scope: { kind: 'selection', path: sel.path, startLine: sel.startLine, endLine: sel.endLine },
+      label: instruction,
     });
+  }
+
+  /** Workspace-relative forward-slash path for a file in the workspace, else undefined. */
+  private relativePath(uri: vscode.Uri): string | undefined {
+    if (uri.scheme !== 'file') return undefined;
+    const rel = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+    if (rel.startsWith('..') || /^[A-Za-z]:/.test(rel) || rel.startsWith('/')) return undefined;
+    return rel;
+  }
+
+  private toEditorSelection(uri: vscode.Uri, startLine: number, endLine: number): EditorSelection | undefined {
+    const rel = this.relativePath(uri);
+    return rel ? { path: rel, startLine, endLine } : undefined;
+  }
+
+  private computeSelection(editor: vscode.TextEditor | undefined): EditorSelection | null {
+    if (!editor) return null;
+    const s = editor.selection;
+    const lines = selectionToLines({ startLine: s.start.line, startChar: s.start.character, endLine: s.end.line, endChar: s.end.character });
+    return (lines && this.toEditorSelection(editor.document.uri, lines.startLine, lines.endLine)) || null;
+  }
+
+  private scheduleSelection(): void {
+    if (this.selectionTimer) clearTimeout(this.selectionTimer);
+    this.selectionTimer = setTimeout(() => {
+      this.selectionTimer = undefined;
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return;
+      const sel = this.computeSelection(editor);
+      const prev = this.lastSelection;
+      if (prev === sel || (prev && sel && prev.path === sel.path && prev.startLine === sel.startLine && prev.endLine === sel.endLine)) return;
+      this.lastSelection = sel;
+      this.send({ type: 'editor.selection', selection: sel });
+    }, 150);
+  }
+
+  private async openFile(rel: string, line?: number): Promise<void> {
+    if (!this.root) return;
+    const abs = path.resolve(this.root, rel);
+    const r = path.relative(this.root, abs);
+    if (r.startsWith('..') || path.isAbsolute(r)) return;
+    try {
+      const editor = await vscode.window.showTextDocument(vscode.Uri.file(abs), { preview: false });
+      if (line && line > 0) {
+        const l = Math.min(line, editor.document.lineCount) - 1;
+        const range = editor.document.lineAt(l).range;
+        editor.selection = new vscode.Selection(range.start, range.end);
+        editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+      }
+    } catch (e) {
+      this.notify('warn', `Could not open ${rel}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /** Reveals the panel and sends `composer.focus`; queued until the webview has posted `ready`. */
+  async addSelectionToChat(selection?: EditorSelection, text?: string): Promise<void> {
+    let sel = selection;
+    if (!sel) {
+      sel = this.computeSelection(vscode.window.activeTextEditor) ?? undefined;
+      if (!sel) {
+        this.notify('info', 'Select some code in a workspace file first.');
+        return;
+      }
+    }
+    await vscode.commands.executeCommand('workbench.view.extension.temper');
+    const m: HostMessage = { type: 'composer.focus', selection: sel, mode: 'edit' as ComposerMode, ...(text ? { text } : {}) };
+    if (this.postFn && this.webviewReady) this.send(m);
+    else this.queued.push(m);
   }
 
   cancel(): void {
@@ -503,7 +625,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     return this.controller.undoLast();
   }
 
-  async selectModel(): Promise<void> {
+  async selectModel(mode: 'agent' | 'inline' = 'agent'): Promise<void> {
     const st = this.connection.state;
     if (!st.connected) {
       await this.connection.check();
@@ -513,13 +635,14 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       this.notify('warn', 'TrueForge reports no models. Add a model provider in TrueForge first.');
       return;
     }
-    const current = this.modelView().agentModel;
+    const view = this.modelView();
+    const current = mode === 'agent' ? view.agentModel : view.inlineModel;
     const pick = await vscode.window.showQuickPick(
       models.map((m) => ({ label: m.name, description: m.name === current ? 'current' : m.provider, detail: m.contextLength ? `${m.contextLength.toLocaleString()} token context` : undefined })),
-      { title: 'Temper: select the model for agent mode', placeHolder: current || 'Choose a model' },
+      { title: `Temper: select the model for ${mode === 'agent' ? 'agent' : 'inline edit'} mode`, placeHolder: current || 'Choose a model' },
     );
     if (!pick) return;
-    await vscode.workspace.getConfiguration('temper').update('models.agentMode', pick.label, vscode.ConfigurationTarget.Global);
+    await vscode.workspace.getConfiguration('temper').update(mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit', pick.label, vscode.ConfigurationTarget.Global);
   }
 
   async openSession(): Promise<void> {
@@ -533,6 +656,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.selectionTimer) clearTimeout(this.selectionTimer);
     this.connection.stop();
     this.controller.dispose();
     this.editorReview.dispose();

@@ -12,6 +12,8 @@
 notes/
 spike/
 .impeccable/
+.codex/
+.playwright-mcp/
 
 # build / deps
 node_modules/

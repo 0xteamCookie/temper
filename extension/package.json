@@ -57,6 +57,11 @@
         "category": "Temper"
       },
       {
+        "command": "temper.addSelectionToChat",
+        "title": "Add Selection to Chat",
+        "category": "Temper"
+      },
+      {
         "command": "temper.openPanel",
         "title": "Open Panel",
         "category": "Temper"
@@ -133,6 +138,12 @@
       }
     ],
     "keybindings": [
+      {
+        "command": "temper.addSelectionToChat",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l",
+        "when": "editorTextFocus && editorHasSelection"
+      },
       {
         "command": "temper.inlineEdit",
         "key": "ctrl+alt+k",
@@ -357,6 +368,11 @@
           "command": "temper.inlineEdit",
           "when": "editorHasSelection",
           "group": "navigation@1"
+        },
+        {
+          "command": "temper.addSelectionToChat",
+          "when": "editorHasSelection",
+          "group": "navigation@2"
         }
       ]
     }

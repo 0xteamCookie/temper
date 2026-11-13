@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hunkAtLine, layoutHunk, layoutHunks } from '../../src/inline/hunkLayout';
 import { buildLenses, flagText, summarize } from '../../src/inline/lensModel';
-import { formatTitle, pushHistory } from '../../src/inline/instructionModel';
+import { formatTitle, pushHistory, selectionToLines, stripItemPrefix } from '../../src/inline/instructionModel';
 import type { Hunk } from '../../src/shared/types';
 
 const hunk = (over: Partial<Hunk>): Hunk => ({
@@ -73,8 +73,19 @@ describe('buildLenses', () => {
 
 describe('instruction model', () => {
   it('title uses en dash for ranges', () => {
-    expect(formatTitle(3, 9)).toBe('Temper: edit selection (Lines 3–9)');
-    expect(formatTitle(4, 4)).toBe('Temper: edit selection (Line 4)');
+    expect(formatTitle('helpers.py', 42, 58, 'qwen')).toBe('Temper · Edit helpers.py · lines 42–58 · qwen');
+    expect(formatTitle('a.ts', 4, 4)).toBe('Temper · Edit a.ts · line 4');
+  });
+  it('strips picker prefixes', () => {
+    expect(stripItemPrefix('$(sparkle) do it')).toBe('do it');
+    expect(stripItemPrefix('$(history) old')).toBe('old');
+    expect(stripItemPrefix('plain')).toBe('plain');
+  });
+  it('maps selections to 1-based inclusive lines', () => {
+    expect(selectionToLines({ startLine: 2, startChar: 1, endLine: 4, endChar: 3 })).toEqual({ startLine: 3, endLine: 5 });
+    expect(selectionToLines({ startLine: 2, startChar: 0, endLine: 4, endChar: 0 })).toEqual({ startLine: 3, endLine: 4 });
+    expect(selectionToLines({ startLine: 2, startChar: 1, endLine: 2, endChar: 1 })).toBeUndefined();
+    expect(selectionToLines({ startLine: 2, startChar: 0, endLine: 2, endChar: 0 })).toBeUndefined();
   });
   it('history dedupes, trims, caps', () => {
     expect(pushHistory(['a', 'b'], ' b ')).toEqual(['b', 'a']);

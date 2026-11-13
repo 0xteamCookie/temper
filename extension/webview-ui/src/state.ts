@@ -1,4 +1,4 @@
-import type { Mention, HostMessage } from '../../src/shared/messages';
+import type { ComposerMode, EditorSelection, Mention, HostMessage } from '../../src/shared/messages';
 import type {
   FileChange,
   HunkDecision,
@@ -35,7 +35,19 @@ export type Block =
       status?: string;
     }
   | { type: 'compaction'; key: string; threadId: string; parent?: string; phase: 'start' | 'done' }
-  | { type: 'banner'; key: string; parent?: undefined; tone: 'warn' | 'info'; text: string; detail?: string };
+  | {
+      type: 'banner';
+      key: string;
+      parent?: undefined;
+      tone: 'warn' | 'info';
+      kind: 'fallback' | 'retry';
+      /** fallback: failed model; retry: model being retried */
+      from: string;
+      to?: string;
+      reason: string;
+      attempt?: number;
+      delayMs?: number;
+    };
 
 export interface RunItem {
   kind: 'run';
@@ -46,6 +58,9 @@ export interface RunItem {
   message?: string;
   metrics?: RunMetrics;
   mainThread?: string;
+  startedAt: number;
+  /** Set when the review for this run closes. */
+  applied?: { applied: number; rejected: number; files: number };
   blocks: Block[];
 }
 
@@ -54,6 +69,8 @@ export interface UserItem {
   id: string;
   text: string;
   mentions: Mention[];
+  mode?: ComposerMode;
+  selection?: EditorSelection;
 }
 
 export type ChatItem = RunItem | UserItem;
@@ -63,7 +80,14 @@ export interface ReviewState {
   changes: FileChange[];
 }
 
+export type View = 'conversation' | 'review' | 'models';
+
 export interface State {
+  view: View;
+  /** Active editor selection pushed by the host (null = none). */
+  selection: EditorSelection | null;
+  /** Composer focus request; `nonce` changes on every request so the composer can react. */
+  focus?: { nonce: number; selection?: EditorSelection; mode?: ComposerMode; text?: string };
   connection: { trueforge: 'connected' | 'disconnected' | 'unknown'; detail?: string };
   items: ChatItem[];
   ledger?: LedgerSnapshot;
@@ -72,15 +96,15 @@ export interface State {
   agentModel: string;
   inlineModel: string;
   review?: ReviewState;
-  toast?: { applied: number; rejected: number };
   canUndo: boolean;
   undoLabel?: string;
   suggestions?: { query: string; items: Mention[] };
-  open: Record<string, boolean>;
   seq: number;
 }
 
 export const initialState: State = {
+  view: 'conversation',
+  selection: null,
   connection: { trueforge: 'unknown' },
   items: [],
   models: [],
@@ -88,24 +112,24 @@ export const initialState: State = {
   agentModel: '',
   inlineModel: '',
   canUndo: false,
-  open: { ledger: true, review: true, models: false },
   seq: 0,
 };
 
 export type Action =
   | { t: 'host'; m: HostMessage }
-  | { t: 'userSend'; text: string; mentions: Mention[] }
-  | { t: 'toggle'; id: string; open?: boolean }
+  | { t: 'userSend'; text: string; mentions: Mention[]; mode?: ComposerMode; selection?: EditorSelection }
+  | { t: 'view'; view: View }
+  | { t: 'fill'; text: string }
+  | { t: 'reset' }
   | { t: 'decide'; hunkIds: string[]; decision: HunkDecision }
   | { t: 'decideAll'; decision: HunkDecision }
-  | { t: 'dismissToast' }
   | { t: 'clearSuggestions' }
   | { t: 'localChain'; chain: string[] }
   | { t: 'localPick'; mode: 'agent' | 'inline'; name: string }
   | { t: 'localBudget'; tokens: number };
 
 function emptyRun(runId: string): RunItem {
-  return { kind: 'run', runId, model: '', mode: 'agent', status: 'running', blocks: [] };
+  return { kind: 'run', runId, model: '', mode: 'agent', status: 'running', startedAt: Date.now(), blocks: [] };
 }
 
 function updateRun(items: ChatItem[], runId: string, fn: (r: RunItem) => RunItem): ChatItem[] {
@@ -132,7 +156,7 @@ function applyRunEvent(run: RunItem, e: RunEvent, seq: number): RunItem {
     run.mainThread === undefined ? { ...run, mainThread: threadId } : run;
   switch (e.kind) {
     case 'runStart':
-      return { ...run, model: e.model, mode: e.mode, status: 'running' };
+      return { ...run, model: e.model, mode: e.mode, status: 'running', startedAt: Date.now() };
     case 'text': {
       const r = withThread(e.threadId);
       const parent = parentFor(r, e.threadId);
@@ -227,7 +251,7 @@ function applyRunEvent(run: RunItem, e: RunEvent, seq: number): RunItem {
         model: e.to,
         blocks: [
           ...run.blocks,
-          { type: 'banner', key, tone: 'warn', text: `Primary model ${e.from} failed (${e.reason}) → switched to ${e.to}` },
+          { type: 'banner', key, tone: 'warn', kind: 'fallback', from: e.from, to: e.to, reason: e.reason },
         ],
       };
     case 'retry':
@@ -235,13 +259,7 @@ function applyRunEvent(run: RunItem, e: RunEvent, seq: number): RunItem {
         ...run,
         blocks: [
           ...run.blocks,
-          {
-            type: 'banner',
-            key,
-            tone: 'info',
-            text: `Retrying ${e.model} (attempt ${e.attempt}) in ${Math.round(e.delayMs / 100) / 10}s`,
-            detail: e.reason,
-          },
+          { type: 'banner', key, tone: 'info', kind: 'retry', from: e.model, reason: e.reason, attempt: e.attempt, delayMs: e.delayMs },
         ],
       };
     case 'done':
@@ -265,19 +283,31 @@ export function reducer(state: State, a: Action): State {
       return {
         ...state,
         seq: state.seq + 1,
-        toast: undefined,
-        items: [...state.items, { kind: 'user', id: `u${state.seq}`, text: a.text, mentions: a.mentions }],
+        items: [
+          ...state.items,
+          { kind: 'user', id: `u${state.seq}`, text: a.text, mentions: a.mentions, mode: a.mode, selection: a.selection },
+        ],
       };
-    case 'toggle':
-      return { ...state, open: { ...state.open, [a.id]: a.open ?? !state.open[a.id] } };
+    case 'view':
+      return { ...state, view: a.view };
+    case 'fill':
+      return { ...state, focus: { nonce: (state.focus?.nonce ?? 0) + 1, text: a.text } };
+    case 'reset':
+      return {
+        ...initialState,
+        connection: state.connection,
+        models: state.models,
+        chain: state.chain,
+        agentModel: state.agentModel,
+        inlineModel: state.inlineModel,
+        selection: state.selection,
+      };
     case 'decide':
       return state.review
         ? { ...state, review: setDecisions(state.review, new Set(a.hunkIds), a.decision) }
         : state;
     case 'decideAll':
       return state.review ? { ...state, review: setDecisions(state.review, 'all', a.decision) } : state;
-    case 'dismissToast':
-      return { ...state, toast: undefined };
     case 'clearSuggestions':
       return { ...state, suggestions: undefined };
     case 'localChain':
@@ -302,12 +332,29 @@ function reduceHost(state: State, m: HostMessage): State {
     case 'models.update':
       return { ...state, models: m.models, chain: m.chain, agentModel: m.agentModel, inlineModel: m.inlineModel };
     case 'review.open':
-      return { ...state, review: { runId: m.runId, changes: m.changes }, toast: undefined, open: { ...state.open, review: true } };
-    case 'review.closed':
+      return { ...state, review: { runId: m.runId, changes: m.changes }, view: 'review' };
+    case 'review.closed': {
+      const files = state.review
+        ? state.review.changes.filter((c) => c.hunks.some((h) => h.decision === 'accept')).length
+        : 0;
+      const has = state.items.some((i) => i.kind === 'run' && i.runId === m.runId);
       return {
         ...state,
         review: undefined,
-        toast: m.applied === 0 && m.rejected === 0 ? undefined : { applied: m.applied, rejected: m.rejected },
+        view: state.view === 'review' ? 'conversation' : state.view,
+        items:
+          has && (m.applied > 0 || m.rejected > 0)
+            ? updateRun(state.items, m.runId, (r) => ({ ...r, applied: { applied: m.applied, rejected: m.rejected, files } }))
+            : state.items,
+      };
+    }
+    case 'editor.selection':
+      return { ...state, selection: m.selection };
+    case 'composer.focus':
+      return {
+        ...state,
+        view: state.view === 'review' ? state.view : 'conversation',
+        focus: { nonce: (state.focus?.nonce ?? 0) + 1, selection: m.selection, mode: m.mode, text: m.text },
       };
     case 'checkpoints.update':
       return { ...state, canUndo: m.canUndo, undoLabel: m.lastLabel };

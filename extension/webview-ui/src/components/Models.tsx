@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ModelInfo } from '../../../src/shared/types';
 import { postToHost } from '../vscode';
-import { Dot } from './ui';
+import { HealthPill, Icon, IconButton, ModelPicker, shortModel } from './ui';
 
 export function Models({
   models,
@@ -19,6 +19,7 @@ export function Models({
   onPick: (mode: 'agent' | 'inline', name: string) => void;
 }) {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
   const byName = new Map(models.map((m) => [m.name, m]));
   const ordered = chain.map((n) => byName.get(n)).filter((m): m is ModelInfo => !!m);
   const rest = models.filter((m) => !chain.includes(m.name));
@@ -32,82 +33,80 @@ export function Models({
     postToHost({ type: 'models.reorder', chain: next });
   };
 
+  const pick = (mode: 'agent' | 'inline') => (name: string) => {
+    onPick(mode, name);
+    postToHost({ type: 'models.pick', mode, name });
+  };
+
   const row = (m: ModelInfo, idx: number | null) => (
     <li
       key={m.name}
-      className={`model-row${dragIdx === idx && idx !== null ? ' dragging' : ''}`}
+      className={`model-row${dragIdx === idx && idx !== null ? ' dragging' : ''}${overIdx === idx && idx !== null && dragIdx !== idx ? ' over' : ''}`}
       draggable={idx !== null}
       onDragStart={() => idx !== null && setDragIdx(idx)}
-      onDragOver={(e) => idx !== null && dragIdx !== null && e.preventDefault()}
+      onDragOver={(e) => {
+        if (idx !== null && dragIdx !== null) {
+          e.preventDefault();
+          setOverIdx(idx);
+        }
+      }}
       onDrop={() => {
         if (idx !== null && dragIdx !== null) move(dragIdx, idx);
         setDragIdx(null);
+        setOverIdx(null);
       }}
-      onDragEnd={() => setDragIdx(null)}
+      onDragEnd={() => {
+        setDragIdx(null);
+        setOverIdx(null);
+      }}
     >
-      <Dot
-        tone={m.health === 'ok' ? 'ok' : m.health === 'failing' ? 'bad' : 'unknown'}
-        label={m.lastError ? `${m.health}: ${m.lastError}` : `Health: ${m.health}`}
-      />
-      <span className="ellipsis model-name" title={m.lastError ?? m.name}>
-        {idx !== null && <span className="muted">{idx + 1}. </span>}
-        {m.name}
+      {idx !== null ? <Icon name="gripper" className="muted grip" /> : <span className="grip" />}
+      {idx !== null && <span className="rank muted">{idx + 1}</span>}
+      <span className="model-info">
+        <span className="ellipsis model-name" title={m.name}>
+          {shortModel(m.name)}
+        </span>
+        <span className="ellipsis muted small">
+          {m.provider}
+          {m.health === 'failing' && m.lastError ? ` · ${m.lastError}` : ''}
+        </span>
       </span>
+      <HealthPill health={m.health} lastError={m.lastError} />
       {idx !== null && (
         <span className="row-actions">
-          <button className="icon-btn" aria-label={`Move ${m.name} up`} disabled={idx === 0} onClick={() => move(idx, idx - 1)}>
-            ↑
-          </button>
-          <button
-            className="icon-btn"
-            aria-label={`Move ${m.name} down`}
-            disabled={idx === chain.length - 1}
-            onClick={() => move(idx, idx + 1)}
-          >
-            ↓
-          </button>
+          <IconButton icon="arrow-up" label={`Move ${m.name} up`} disabled={idx === 0} onClick={() => move(idx, idx - 1)} />
+          <IconButton icon="arrow-down" label={`Move ${m.name} down`} disabled={idx === chain.length - 1} onClick={() => move(idx, idx + 1)} />
         </span>
       )}
     </li>
   );
 
-  const select = (mode: 'agent' | 'inline', value: string, label: string) => (
-    <label className="field">
-      <span>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => {
-          onPick(mode, e.target.value);
-          postToHost({ type: 'models.pick', mode, name: e.target.value });
-        }}
-      >
-        {!models.some((m) => m.name === value) && <option value={value}>{value || '—'}</option>}
-        {models.map((m) => (
-          <option key={m.name} value={m.name}>
-            {m.name}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-
   return (
     <div className="models">
-      <div className="muted small">Fallback chain (first is primary). Drag or use arrows to reorder.</div>
+      <div className="field">
+        <span className="field-label">Agent model</span>
+        <ModelPicker variant="field" label="Agent model" models={models} value={agentModel} onPick={pick('agent')} />
+      </div>
+      <div className="field">
+        <span className="field-label">Inline edit model</span>
+        <ModelPicker variant="field" label="Inline edit model" models={models} value={inlineModel} onPick={pick('inline')} />
+      </div>
+      <h3>Fallback chain</h3>
+      <p className="muted small help">
+        Temper tries these in order and switches automatically when a model fails before any edit is staged.
+      </p>
       <ul className="model-list" aria-label="Fallback chain">
         {ordered.map((m, i) => row(m, i))}
+        {ordered.length === 0 && <li className="muted small">No models in the chain yet.</li>}
       </ul>
       {rest.length > 0 && (
         <>
-          <div className="muted small">Not in chain</div>
-          <ul className="model-list">{rest.map((m) => row(m, null))}</ul>
+          <h3>Not in chain</h3>
+          <ul className="model-list" aria-label="Models not in the chain">
+            {rest.map((m) => row(m, null))}
+          </ul>
         </>
       )}
-      {select('agent', agentModel, 'Agent model')}
-      {select('inline', inlineModel, 'Inline model')}
-      <button className="btn" onClick={() => postToHost({ type: 'openSession' })}>
-        Open TrueForge session
-      </button>
     </div>
   );
 }

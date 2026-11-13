@@ -1,6 +1,7 @@
 // Dev harness: mocks the extension host when running outside VS Code.
 // Replays a scripted run so every UI section is visible (`npm run dev`).
 import type { FileChange, Hunk, LedgerEntry, LedgerSnapshot, ModelInfo, RunEvent } from '../../src/shared/types';
+import type { EditorSelection } from '../../src/shared/messages';
 import type { HostMessage, Mention, WebviewMessage } from './vscode';
 import { setMockHandler } from './vscode';
 
@@ -16,6 +17,10 @@ const MODELS: ModelInfo[] = [
 let chain = ['anthropic/claude-sonnet', 'openai/gpt-5', 'google/gemini-pro'];
 let agentModel = 'anthropic/claude-sonnet';
 let inlineModel = 'local/qwen-coder';
+let runN = 0;
+let runId = 'run-0';
+const SEL: EditorSelection = { path: 'src/flask/helpers.py', startLine: 42, endLine: 58 };
+let selOn = true;
 const sendModels = () => send({ type: 'models.update', models: MODELS, chain, agentModel, inlineModel });
 
 const reasons = (r: LedgerEntry['reasons']) => r;
@@ -28,12 +33,18 @@ let entries: LedgerEntry[] = [
     reasons: [{ reason: 'testPair', detail: 'tests src/flask/helpers.py' }] },
   { id: 'docs/config.rst', path: 'docs/config.rst', score: 3.0, tokens: 3800, representation: 'full', included: false,
     reasons: [{ reason: 'docsPair', detail: 'documents DEBUG setting' }] },
+  { id: 'src/flask/cli.py#FlaskGroup', path: 'src/flask/cli.py', symbol: 'FlaskGroup', startLine: 530, endLine: 610, score: 4.4, tokens: 1800, representation: 'snippet', included: true,
+    reasons: [{ reason: 'symbol', detail: 'defines FlaskGroup' }, { reason: 'selection', detail: 'Inside your selection' }] },
+  { id: 'src/flask/__init__.py', path: 'src/flask/__init__.py', score: 2.0, tokens: 700, representation: 'outline', included: true,
+    reasons: [{ reason: 'graph', detail: 'package entry point' }] },
+  { id: 'tests/conftest.py', path: 'tests/conftest.py', score: 1.8, tokens: 900, representation: 'outline', included: true,
+    reasons: [{ reason: 'testPair', detail: 'fixtures used by test_helpers.py' }] },
   { id: 'src/flask/app.py', path: 'src/flask/app.py', score: 2.1, tokens: 9400, representation: 'outline', included: false,
     reasons: [{ reason: 'graph', detail: 'calls get_debug_flag' }, { reason: 'agent', detail: 'read via read_file' }] },
 ];
 let budget = 8000;
 const snapshot = (): LedgerSnapshot => ({
-  runId: 'run-1',
+  runId,
   task: 'Make get_debug_flag also honour FLASK_DEBUG=0',
   budgetTokens: budget,
   usedTokens: entries.filter((e) => e.included && !e.evicted).reduce((a, e) => a + e.tokens, 0),
@@ -89,30 +100,52 @@ function streamText(start: number, threadId: string, text: string, runId: string
   return start + parts.length * step;
 }
 
-export function replay(userText = 'Make get_debug_flag honour FLASK_DEBUG=0 and add a test', mentions: Mention[] = [{ kind: 'symbol', value: 'get_debug_flag' }]): void {
+export function replay(
+  userText = 'Make get_debug_flag honour FLASK_DEBUG=0 and add a test',
+  mentions: Mention[] = [{ kind: 'symbol', value: 'get_debug_flag' }],
+  mode?: 'agent' | 'edit',
+  selection?: EditorSelection,
+): void {
   stop();
-  const runId = 'run-1';
-  window.dispatchEvent(new CustomEvent('temper-dev-user', { detail: { text: userText, mentions } }));
-  at(100, () => ev({ kind: 'runStart', runId, mode: 'agent', model: 'anthropic/claude-sonnet', sessionId: 's1' }));
+  runId = `run-${++runN}`;
+  const id = runId;
+  window.dispatchEvent(new CustomEvent('temper-dev-user', { detail: { text: userText, mentions, mode, selection } }));
+  at(100, () => ev({ kind: 'runStart', runId: id, mode: mode === 'edit' ? 'inline' : 'agent', model: agentModel, sessionId: 's1' }));
   at(250, () => send({ type: 'ledger.update', snapshot: snapshot() }));
-  let t = streamText(400, T, "I'll start by exploring the repo.\n\n", runId);
-  at(t += 100, () => ev({ kind: 'subagent', runId, threadId: S, title: 'Scout: exploring repo', phase: 'start' }));
-  at(t += 200, () => ev({ kind: 'toolCall', runId, threadId: S, id: 't1', name: 'grep', args: { pattern: 'FLASK_DEBUG', path: 'src/' } }));
-  at(t += 800, () => ev({ kind: 'toolResult', runId, threadId: S, id: 't1', content: 'src/flask/helpers.py:12', isError: false }));
-  at(t += 100, () => ev({ kind: 'toolCall', runId, threadId: S, id: 't2', name: 'read_file', args: { path: 'src/flask/helpers.py' } }));
-  at(t += 700, () => ev({ kind: 'toolResult', runId, threadId: S, id: 't2', content: 'def get_debug_flag(): ...', isError: false }));
-  at(t += 200, () => ev({ kind: 'subagent', runId, threadId: S, title: 'Scout: exploring repo', phase: 'done', status: 'found 2 files' }));
-  at(t += 200, () => ev({ kind: 'compaction', runId, threadId: T, phase: 'start' }));
-  at(t += 700, () => ev({ kind: 'compaction', runId, threadId: T, phase: 'done' }));
-  at(t += 200, () => ev({ kind: 'fallback', runId, from: 'anthropic/claude-sonnet', to: 'openai/gpt-5', reason: 'rate limit 429' }));
-  at(t += 100, () => ev({ kind: 'retry', runId, model: 'openai/gpt-5', attempt: 2, delayMs: 1500, reason: 'timeout' }));
-  t = streamText(t + 300, T, "Found it. The fix is in `get_debug_flag`:\n\n- treat **unset** as `False`\n- keep the `0/false/no` handling\n\n```python\nif val is None:\n    return False\n```\n\n", runId);
-  at(t += 100, () => ev({ kind: 'toolCall', runId, threadId: T, id: 't3', name: 'edit_file', args: { path: 'src/flask/config.py' } }));
-  at(t += 600, () => ev({ kind: 'toolResult', runId, threadId: T, id: 't3', content: 'No match for old_str (fuzzy failed)', isError: true }));
-  at(t += 100, () => ev({ kind: 'toolCall', runId, threadId: T, id: 't4', name: 'edit_file', args: { path: 'src/flask/helpers.py' } }));
-  at(t += 600, () => ev({ kind: 'toolResult', runId, threadId: T, id: 't4', content: 'ok', isError: false }));
-  at(t += 100, () => ev({ kind: 'status', runId, status: 'paused' }));
-  at(t + 100, () => send({ type: 'review.open', runId, changes: structuredClone(changes) }));
+  let t = streamText(400, T, "I'll start by exploring the repo.\n\n", id);
+  const call = (tid: string, name: string, args: unknown, thread: string, result: string, isError = false, gap = 700) => {
+    at(t += 150, () => ev({ kind: 'toolCall', runId: id, threadId: thread, id: tid, name, args }));
+    at(t += gap, () => ev({ kind: 'toolResult', runId: id, threadId: thread, id: tid, content: result, isError }));
+  };
+  call('t0', 'list_tools', {}, T, 'read_file, grep, propose_edit, run_command', false, 300);
+  call('t1', 'grep', { pattern: 'FLASK_DEBUG', path: 'src/' }, T, 'src/flask/helpers.py:12', false, 800);
+  at(t += 100, () => ev({ kind: 'subagent', runId: id, threadId: S, title: 'Scout: exploring repo', phase: 'start' }));
+  call('s1', 'grep', { pattern: 'get_debug_flag' }, S, 'src/flask/config.py:30', false, 600);
+  call('s2', 'read_file', { path: 'src/flask/config.py', line: 28 }, S, 'class Config(dict): ...', false, 600);
+  at(t += 200, () => ev({ kind: 'subagent', runId: id, threadId: S, title: 'Scout: exploring repo', phase: 'done', status: 'found 2 files' }));
+  call('t2', 'read_file', { path: 'src/flask/helpers.py', line: 40 }, T, 'def get_debug_flag(): ...', false, 700);
+  call('t3', 'read_file', { path: 'tests/test_helpers.py' }, T, 'def test_get_debug_flag(): ...', false, 700);
+  at(t += 200, () => ev({ kind: 'compaction', runId: id, threadId: T, phase: 'start' }));
+  at(t += 700, () => ev({ kind: 'compaction', runId: id, threadId: T, phase: 'done' }));
+  at(t += 200, () => ev({ kind: 'fallback', runId: id, from: 'anthropic/claude-sonnet', to: 'openai/gpt-5', reason: 'rate limit 429' }));
+  at(t += 100, () => ev({ kind: 'retry', runId: id, model: 'openai/gpt-5', attempt: 2, delayMs: 1500, reason: 'timeout' }));
+  t = streamText(t + 300, T, "Found it. The fix is in `get_debug_flag`:\n\n- treat **unset** as `False`\n- keep the `0/false/no` handling\n\n```python\nif val is None:\n    return False\n```\n\n", id);
+  call('t4', 'edit_file', { path: 'src/flask/config.py' }, T, 'No match for old_str (fuzzy failed)', true, 600);
+  call('t5', 'edit_file', { path: 'src/flask/helpers.py', line: 10 }, T, 'ok', false, 600);
+  call('t6', 'run_command', { command: 'pytest tests/test_helpers.py -q' }, T, '3 passed in 0.4s', false, 900);
+  call('t7', 'submit_changeset', { files: 3 }, T, 'staged', false, 400);
+  at(t += 100, () => ev({ kind: 'status', runId: id, status: 'paused' }));
+  at(t + 100, () => send({ type: 'review.open', runId: id, changes: structuredClone(changes) }));
+}
+
+export function reset(): void {
+  stop();
+  window.dispatchEvent(new CustomEvent('temper-dev-reset'));
+}
+
+export function toggleSelection(): void {
+  selOn = !selOn;
+  send({ type: 'editor.selection', selection: selOn ? SEL : null });
 }
 
 export function stop(): void {
@@ -127,14 +160,14 @@ function handle(m: WebviewMessage): void {
       send({ type: 'connection', trueforge: 'connected', detail: 'localhost:8000' });
       sendModels();
       send({ type: 'checkpoints.update', canUndo: false });
-      at(500, () => replay());
+      send({ type: 'editor.selection', selection: SEL });
       break;
     case 'chat.send':
-      replay(m.text, m.mentions);
+      replay(m.text, m.mentions, m.mode, m.selection);
       break;
     case 'run.cancel':
       stop();
-      ev({ kind: 'done', runId: 'run-1', status: 'cancelled', message: 'Stopped by user' });
+      ev({ kind: 'done', runId, status: 'cancelled', message: 'Stopped by user' });
       break;
     case 'mention.query': {
       const all: Mention[] = [
@@ -168,10 +201,10 @@ function handle(m: WebviewMessage): void {
       sendModels();
       break;
     case 'review.submit':
-      send({ type: 'review.closed', runId: 'run-1', applied: 2, rejected: 2 });
+      send({ type: 'review.closed', runId, applied: 3, rejected: 1 });
       send({ type: 'checkpoints.update', canUndo: true, lastLabel: 'FLASK_DEBUG fix' });
-      ev({ kind: 'status', runId: 'run-1', status: 'running' });
-      at(500, () => ev({ kind: 'done', runId: 'run-1', status: 'done', metrics: { inputTokens: 12400, outputTokens: 860, toolCalls: 4, durationMs: 14200 } }));
+      ev({ kind: 'status', runId, status: 'running' });
+      at(500, () => ev({ kind: 'done', runId, status: 'done', metrics: { inputTokens: 12400, outputTokens: 860, toolCalls: 4, durationMs: 14200 } }));
       break;
     case 'undo.last':
       send({ type: 'checkpoints.update', canUndo: false });
@@ -182,5 +215,7 @@ function handle(m: WebviewMessage): void {
 }
 
 export function startDemo(): void {
+  document.documentElement.dataset.devTheme = 'dark';
+  document.body.className = 'vscode-dark';
   setMockHandler(handle);
 }
