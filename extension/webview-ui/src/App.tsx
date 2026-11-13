@@ -1,13 +1,14 @@
-import { lazy, Suspense, useEffect, useReducer } from 'react';
+import { lazy, Suspense, useEffect, useReducer, useRef } from 'react';
 import { Chat } from './components/Chat';
 import { Composer } from './components/Composer';
-import { Header, SubHeader } from './components/Header';
+import { ConnectionBanner, SubHeader } from './components/Header';
 import { History } from './components/History';
-import { Models } from './components/Models';
 import { Review } from './components/Review';
+import { SettingsHome, SettingsPageView, sectionTitle } from './components/Settings';
 import { PriceProvider, SessionUsage } from './components/Usage';
 import { Icon } from './components/ui';
 import { initialState, isRunning, reducer } from './state';
+import type { SettingsPage } from './state';
 import { isVsCode, onHostMessage, postToHost } from './vscode';
 
 const DevBar = lazy(() => import('./components/DevBar').then((m) => ({ default: m.DevBar })));
@@ -39,6 +40,19 @@ export function App() {
     };
   }, []);
 
+  // Dev harness only: the DevBar switches views (the real header actions live in VS Code's view title).
+  useEffect(() => {
+    if (isVsCode) return;
+    const h = (e: Event) => {
+      const d = (e as CustomEvent<{ view: string; page?: SettingsPage }>).detail;
+      if (d.view === 'history') toHistoryRef.current();
+      else if (d.view === 'settings') dispatch({ t: 'settingsPage', page: d.page ?? null });
+      else dispatch({ t: 'view', view: 'conversation' });
+    };
+    window.addEventListener('temper-dev-view', h);
+    return () => window.removeEventListener('temper-dev-view', h);
+  }, []);
+
   // Esc stops the run (popovers and the composer swallow Esc when they close).
   useEffect(() => {
     if (!running) return;
@@ -51,7 +65,10 @@ export function App() {
 
   const toConversation = () => dispatch({ t: 'view', view: 'conversation' });
   const toReview = () => dispatch({ t: 'view', view: 'review' });
-  const toModels = () => dispatch({ t: 'view', view: 'models' });
+  const toSettings = (page: SettingsPage | null = null) => {
+    dispatch({ t: 'settingsPage', page });
+    postToHost({ type: 'settings.refresh' });
+  };
   const requestHistory = (pageToken?: string) => {
     dispatch({ t: 'historyLoading' });
     postToHost({ type: 'history.list', pageToken });
@@ -61,9 +78,27 @@ export function App() {
     requestHistory();
   };
   const newChat = () => {
-    dispatch({ t: 'newChat' });
+    // While a run is active the host refuses and says why; the chat stays as it is.
+    if (!running) dispatch({ t: 'newChat' });
     postToHost({ type: 'session.new' });
   };
+  // Native view-title commands arrive as `nav` messages (handlers kept fresh through a ref).
+  const toHistoryRef = useRef(toHistory);
+  const navRef = useRef({ newChat, toHistory, toSettings });
+  toHistoryRef.current = toHistory;
+  navRef.current = { newChat, toHistory, toSettings };
+  useEffect(
+    () =>
+      onHostMessage((m) => {
+        if (m.type !== 'nav') return;
+        if (m.to === 'newChat') {
+          dispatch({ t: 'view', view: 'conversation' });
+          navRef.current.newChat();
+        } else if (m.to === 'history') navRef.current.toHistory();
+        else navRef.current.toSettings();
+      }),
+    [],
+  );
 
   const hunks = state.review?.changes.reduce((n, c) => n + c.hunks.length, 0) ?? 0;
   const files = state.review?.changes.length ?? 0;
@@ -71,13 +106,15 @@ export function App() {
   return (
     <PriceProvider models={state.models}>
     <div className="app">
-      <Header
-        state={state}
-        onToggleModels={() => (view === 'models' ? toConversation() : toModels())}
-        onToggleHistory={() => (view === 'history' ? toConversation() : toHistory())}
-        onNewChat={newChat}
-      />
-      {view !== 'conversation' && <SubHeader view={view} onBack={toConversation} />}
+      {!(view === 'settings' && state.settingsPage === 'connection') && <ConnectionBanner state={state} />}
+      {view === 'review' && <SubHeader backLabel="Conversation" title="Review" onBack={toConversation} />}
+      {view === 'history' && <SubHeader backLabel="Conversation" title="History" onBack={toConversation} />}
+      {view === 'settings' &&
+        (state.settingsPage ? (
+          <SubHeader backLabel="Settings" title={sectionTitle(state.settingsPage)} onBack={() => dispatch({ t: 'settingsPage', page: null })} />
+        ) : (
+          <SubHeader backLabel="Conversation" title="Settings" onBack={toConversation} />
+        ))}
 
       <div className="scroll" hidden={view !== 'conversation'}>
         {state.notice && (
@@ -130,19 +167,18 @@ export function App() {
         </div>
       )}
 
-      {view === 'models' && (
+      {view === 'settings' && (
         <div className="scroll">
-          <Models
-            models={state.models}
-            chain={state.chain}
-            agentModel={state.agentModel}
-            inlineModel={state.inlineModel}
-            connected={state.connection.trueforge !== 'disconnected'}
-            detail={state.connection.detail}
-            providers={state.providers}
-            onChain={(chain) => dispatch({ t: 'localChain', chain })}
-            onPick={(mode, name) => dispatch({ t: 'localPick', mode, name })}
-          />
+          {state.settingsPage ? (
+            <SettingsPageView
+              page={state.settingsPage}
+              state={state}
+              onChain={(chain) => dispatch({ t: 'localChain', chain })}
+              onPick={(mode, name) => dispatch({ t: 'localPick', mode, name })}
+            />
+          ) : (
+            <SettingsHome state={state} onOpen={(p) => dispatch({ t: 'settingsPage', page: p })} />
+          )}
         </div>
       )}
 
@@ -163,7 +199,7 @@ export function App() {
           }}
           onClearSuggestions={() => dispatch({ t: 'clearSuggestions' })}
           onPickModel={(mode, name) => dispatch({ t: 'localPick', mode, name })}
-          onManageModels={toModels}
+          onManageModels={() => toSettings('fallback')}
         />
       </div>
 

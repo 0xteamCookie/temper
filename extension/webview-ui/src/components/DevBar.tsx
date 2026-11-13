@@ -1,6 +1,6 @@
 // Shown only in the dev harness (outside VS Code).
 import { useEffect, useState } from 'react';
-import { loadSession, replay, reset, setServer, toggleSelection } from '../demo';
+import { loadSession, navigate, replay, reset, setSandbox, setServer, toggleSelection } from '../demo';
 
 type Theme = 'dark' | 'light' | 'hc' | 'hc-light';
 
@@ -21,6 +21,24 @@ export function DevBar() {
   return (
     <div className="devbar" role="toolbar" aria-label="Dev harness">
       <span className="muted">dev</span>
+      <span className="muted">title bar:</span>
+      <button className="btn btn-sm" onClick={() => window.dispatchEvent(new CustomEvent('temper-dev-view', { detail: { view: 'conversation' } }))}>
+        Chat
+      </button>
+      <button className="btn btn-sm" onClick={() => navigate('newChat')}>
+        New chat
+      </button>
+      <button className="btn btn-sm" onClick={() => navigate('history')}>
+        History
+      </button>
+      <button className="btn btn-sm" onClick={() => navigate('settings')}>
+        Settings
+      </button>
+      <select defaultValue="off" aria-label="Sandbox state" onChange={(e) => setSandbox(e.target.value as 'off' | 'on' | 'error')}>
+        <option value="off">Sandbox off</option>
+        <option value="on">Sandbox on</option>
+        <option value="error">Sandbox error</option>
+      </select>
       <button className="btn btn-sm" onClick={() => replay()}>
         Replay run
       </button>

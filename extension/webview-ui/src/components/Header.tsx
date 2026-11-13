@@ -1,73 +1,74 @@
-import { isRunning } from '../state';
-import type { State, View } from '../state';
+import type { State } from '../state';
 import { postToHost } from '../vscode';
-import { IconButton } from './ui';
+import { Icon, Spinner } from './ui';
 
-export function Header({
-  state,
-  onToggleModels,
-  onToggleHistory,
-  onNewChat,
-}: {
-  state: State;
-  onToggleModels: () => void;
-  onToggleHistory: () => void;
-  onNewChat: () => void;
-}) {
-  const busy = isRunning(state);
+/**
+ * Connection status, shown only when something is wrong: nothing while connected. The view title and its
+ * actions (New chat, History, Undo, Open session, Settings) live in VS Code's native title bar.
+ */
+export function ConnectionBanner({ state }: { state: State }) {
   const conn = state.connection;
-  const tone = conn.trueforge === 'connected' ? 'ok' : conn.trueforge === 'disconnected' ? 'bad' : 'unknown';
-  const word = conn.trueforge === 'connected' ? 'TrueForge' : conn.trueforge === 'disconnected' ? 'Offline' : 'Connecting';
-  const full =
-    conn.trueforge === 'connected'
-      ? 'TrueForge connected'
-      : conn.trueforge === 'disconnected'
-        ? 'TrueForge disconnected'
-        : 'Connecting to TrueForge';
-  const tip = conn.detail ? `${full}: ${conn.detail}` : full;
+  if (conn.trueforge === 'connected') return null;
+  const result = state.providers.result?.scope === 'server' ? state.providers.result : undefined;
+  if (conn.trueforge === 'unknown') {
+    return (
+      <div className="conn-banner" role="status">
+        <Spinner />
+        <span className="grow">Connecting to TrueForge…</span>
+      </div>
+    );
+  }
   return (
-    <header className="app-header">
-      <h1>Temper</h1>
-      <span className={`pill pill-${tone}`} title={tip} aria-label={tip}>
-        <span className="dot" aria-hidden="true" />
-        <span className="ellipsis">{word}</span>
-      </span>
-      <span className="spacer" />
-      <IconButton
-        icon="add"
-        label="New chat"
-        title={busy ? 'Stop the current run before starting a new chat' : 'New chat'}
-        disabled={busy}
-        onClick={onNewChat}
-      />
-      <IconButton
-        icon="history"
-        label="History"
-        pressed={state.view === 'history'}
-        onClick={onToggleHistory}
-      />
-      <IconButton
-        icon="discard"
-        label={state.canUndo ? `Undo: ${state.undoLabel ?? 'last change'}` : 'Undo last change'}
-        disabled={!state.canUndo}
-        onClick={() => postToHost({ type: 'undo.last' })}
-      />
-      <IconButton icon="link-external" label="Open TrueForge session" onClick={() => postToHost({ type: 'openSession' })} />
-      <IconButton icon="settings-gear" label="Models" pressed={state.view === 'models'} onClick={onToggleModels} />
-    </header>
+    <div className="conn-banner conn-banner-bad" role="alert">
+      <Icon name="debug-disconnect" className="bad-text" />
+      <div className="grow conn-text">
+        <strong>TrueForge is not reachable.</strong>{' '}
+        <span className="muted">
+          {conn.detail ?? 'Temper runs its agent on a local TrueForge server.'}
+        </span>
+        {result && (
+          <div className={`small ${result.level === 'error' ? 'err-text' : 'muted'}`}>
+            {result.text}
+            {result.command && (
+              <>
+                {' '}
+                <code>{result.command}</code>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="conn-actions">
+        <button type="button" className="btn btn-sm btn-primary" onClick={() => postToHost({ type: 'server.start' })}>
+          <Icon name="play" /> Start TrueForge
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => postToHost({ type: 'connection.retry' })}>
+          <Icon name="refresh" /> Retry
+        </button>
+      </div>
+    </div>
   );
 }
 
-export function SubHeader({ view, onBack }: { view: Exclude<View, 'conversation'>; onBack: () => void }) {
+/** Sub-view header (Review, History, Settings): a back button and the current title. */
+export function SubHeader({
+  backLabel,
+  title,
+  onBack,
+}: {
+  /** What the back button returns to ("Conversation", "Settings"). */
+  backLabel: string;
+  title: string;
+  onBack: () => void;
+}) {
   return (
     <div className="sub-header">
-      <button type="button" className="back-btn" onClick={onBack} aria-label="Back to conversation">
+      <button type="button" className="back-btn" onClick={onBack} aria-label={`Back to ${backLabel}`}>
         <span className="codicon codicon-arrow-left" aria-hidden="true" />
-        Conversation
+        {backLabel}
       </button>
-      <span className="sub-title">
-        {view === 'review' ? 'Review' : view === 'history' ? 'History' : 'Models'}
-      </span>
+      <Icon name="chevron-right" className="muted" />
+      <h1 className="sub-title ellipsis">{title}</h1>
     </div>
   );
 }

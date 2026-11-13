@@ -35,6 +35,9 @@ export function activate(context: vscode.ExtensionContext): void {
   cmd('temper.selectModel', () => host.selectModel());
   cmd('temper.inlineEdit', () => host.inlineEdit());
   cmd('temper.openSession', () => host.openSession());
+  cmd('temper.newChat', () => host.navigate('newChat'));
+  cmd('temper.showHistory', () => host.navigate('history'));
+  cmd('temper.openSettings', () => host.navigate('settings'));
   cmd('temper.showLog', () => host.showLog());
 
   // Never block activation on TrueForge or the tool server.

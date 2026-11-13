@@ -8,6 +8,7 @@ import type {
   RunMetrics,
 } from '../../src/shared/types';
 import type { ProviderPanelState } from '../../src/shared/providers';
+import type { SandboxState, ServerInfo, SettingsSnapshot } from '../../src/shared/settings';
 import type { SessionSummary, TranscriptTurn } from '../../src/shared/sessions';
 
 export type RunStatus = 'running' | 'paused' | 'done' | 'error' | 'cancelled';
@@ -82,7 +83,17 @@ export interface ReviewState {
   changes: FileChange[];
 }
 
-export type View = 'conversation' | 'review' | 'models' | 'history';
+export type View = 'conversation' | 'review' | 'settings' | 'history';
+
+export type SettingsPage =
+  | 'models'
+  | 'providers'
+  | 'fallback'
+  | 'context'
+  | 'safety'
+  | 'pricing'
+  | 'sandbox'
+  | 'connection';
 
 export interface HistoryState {
   sessions: SessionSummary[];
@@ -95,6 +106,11 @@ export interface HistoryState {
 
 export interface State {
   view: View;
+  /** Open Settings sub-page (null = the Settings menu). */
+  settingsPage: SettingsPage | null;
+  settings?: SettingsSnapshot;
+  sandbox: SandboxState;
+  server?: ServerInfo;
   /** Active editor selection pushed by the host (null = none). */
   selection: EditorSelection | null;
   /** Composer focus request; `nonce` changes on every request so the composer can react. */
@@ -121,6 +137,8 @@ export interface State {
 
 export const initialState: State = {
   view: 'conversation',
+  settingsPage: null,
+  sandbox: { loaded: false, connected: false, busy: false },
   selection: null,
   connection: { trueforge: 'unknown' },
   items: [],
@@ -138,6 +156,7 @@ export type Action =
   | { t: 'host'; m: HostMessage }
   | { t: 'userSend'; text: string; mentions: Mention[]; mode?: ComposerMode; selection?: EditorSelection }
   | { t: 'view'; view: View }
+  | { t: 'settingsPage'; page: SettingsPage | null }
   | { t: 'fill'; text: string }
   | { t: 'reset' }
   /** Clear the chat for a new session (the host forgets the current one). */
@@ -313,6 +332,8 @@ export function reducer(state: State, a: Action): State {
       };
     case 'view':
       return { ...state, view: a.view };
+    case 'settingsPage':
+      return { ...state, view: 'settings', settingsPage: a.page };
     case 'fill':
       return { ...state, focus: { nonce: (state.focus?.nonce ?? 0) + 1, text: a.text } };
     case 'reset':
@@ -324,6 +345,9 @@ export function reducer(state: State, a: Action): State {
         agentModel: state.agentModel,
         inlineModel: state.inlineModel,
         providers: state.providers,
+        settings: state.settings,
+        sandbox: state.sandbox,
+        server: state.server,
         selection: state.selection,
       };
     case 'newChat':
@@ -367,6 +391,14 @@ function reduceHost(state: State, m: HostMessage): State {
       return { ...state, ledger: m.snapshot };
     case 'models.update':
       return { ...state, models: m.models, chain: m.chain, agentModel: m.agentModel, inlineModel: m.inlineModel };
+    case 'settings.state':
+      return { ...state, settings: m.settings };
+    case 'sandbox.state':
+      return { ...state, sandbox: m.state };
+    case 'server.info':
+      return { ...state, server: m.server };
+    case 'nav':
+      return state;
     case 'providers.state':
       return { ...state, providers: m.state };
     case 'review.open':

@@ -76,7 +76,9 @@
       {
         "command": "temper.undoLastChange",
         "title": "Undo Last Agent Change",
-        "category": "Temper"
+        "category": "Temper",
+        "icon": "$(discard)",
+        "enablement": "temper.canUndo"
       },
       {
         "command": "temper.selectModel",
@@ -86,7 +88,26 @@
       {
         "command": "temper.openSession",
         "title": "Open Session in TrueForge",
-        "category": "Temper"
+        "category": "Temper",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "temper.newChat",
+        "title": "New Chat",
+        "category": "Temper",
+        "icon": "$(add)"
+      },
+      {
+        "command": "temper.showHistory",
+        "title": "Show History",
+        "category": "Temper",
+        "icon": "$(history)"
+      },
+      {
+        "command": "temper.openSettings",
+        "title": "Open Settings",
+        "category": "Temper",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "temper.showLog",
@@ -348,6 +369,33 @@
       }
     },
     "menus": {
+      "view/title": [
+        {
+          "command": "temper.newChat",
+          "when": "view == temper.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "temper.showHistory",
+          "when": "view == temper.panel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "temper.undoLastChange",
+          "when": "view == temper.panel",
+          "group": "navigation@3"
+        },
+        {
+          "command": "temper.openSession",
+          "when": "view == temper.panel",
+          "group": "navigation@4"
+        },
+        {
+          "command": "temper.openSettings",
+          "when": "view == temper.panel",
+          "group": "navigation@5"
+        }
+      ],
       "commandPalette": [
         {
           "command": "temper.inline.acceptHunk",

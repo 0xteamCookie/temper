@@ -8,6 +8,7 @@ import type {
 } from './types';
 import type { ProviderPanelState } from './providers';
 import type { SessionSummary, TranscriptTurn } from './sessions';
+import type { SandboxState, ServerInfo, SettingsSnapshot } from './settings';
 
 export interface Mention {
   kind: 'file' | 'symbol';
@@ -50,7 +51,12 @@ export type HostMessage =
   | { type: 'session.loaded'; sessionId: string; turns: TranscriptTurn[]; notice?: string }
   | { type: 'session.loadFailed'; sessionId: string; message: string }
   /** The session the next message continues (undefined = a new chat). */
-  | { type: 'session.current'; sessionId?: string };
+  | { type: 'session.current'; sessionId?: string }
+  /** A native view-title command was run (New chat, History, Settings). */
+  | { type: 'nav'; to: 'newChat' | 'history' | 'settings' }
+  | { type: 'settings.state'; settings: SettingsSnapshot }
+  | { type: 'sandbox.state'; state: SandboxState }
+  | { type: 'server.info'; server: ServerInfo };
 
 /** Webview -> extension host */
 export type WebviewMessage =
@@ -79,5 +85,12 @@ export type WebviewMessage =
   | { type: 'providers.add'; id: string }
   | { type: 'providers.edit' | 'providers.check' | 'providers.remove'; name: string }
   | { type: 'server.start' | 'server.copyCommand' | 'connection.retry' }
+  /** Settings pages. `settings.update` is validated host-side against an allowlist of temper.* keys. */
+  | { type: 'settings.refresh' }
+  | { type: 'settings.update'; key: string; value: unknown }
+  /** Reveal a list setting in settings.json (the panel does not edit allowlists or price overrides). */
+  | { type: 'settings.openJson'; key: string }
+  | { type: 'sandbox.connect' }
+  | { type: 'trueforge.open' }
   /** Open a workspace file in the editor, optionally revealing a 1-based line. */
   | { type: 'open.file'; path: string; line?: number };

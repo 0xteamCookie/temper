@@ -2,7 +2,6 @@
 // review, status bar, output channel and the webview backend. Everything is async; activation never blocks.
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { fmtTokens } from '../shared/format';
 import { ContextEngine, createGetContextTool, createNodeReader } from '../context';
 import { getSettings } from '../config';
 import { formatPrice } from '../shared/usage';
@@ -27,6 +26,9 @@ import { createEditTools } from './editTools';
 import { EditorReview } from './editorReview';
 import { mentionSuggestions } from './mentions';
 import { ProviderSetup } from './providerSetup';
+import { SandboxSetup } from './sandboxSetup';
+import { isJsonOnlyKey, validateSetting } from '../shared/settings';
+import type { SettingsSnapshot } from '../shared/settings';
 import { buildInlinePrompt, composeAgentPrompt } from './prompts';
 import { RunController } from './runController';
 import type { ReviewPresentation, RunUi } from './runController';
@@ -147,6 +149,11 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       log: (l) => this.log(l),
       refreshConnection: () => this.connection.check(),
     });
+    this.sandbox = new SandboxSetup({
+      getBaseUrl: () => this.baseUrl,
+      post: (m) => this.send(m),
+      log: (l) => this.log(l),
+    });
     this.connection.setAgentProvider(() => this.agentDefs());
     this.editorReview = new EditorReview(this.root ? vscode.Uri.file(this.root) : undefined);
 
@@ -190,6 +197,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     });
     this.workspace = workspace;
 
+    void vscode.commands.executeCommand('setContext', 'temper.canUndo', false);
     this.status.command = 'temper.selectModel';
     this.renderStatus();
     this.status.show();
@@ -205,6 +213,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       this.connection.onChange(() => {
         this.postConnection();
         void this.providers.refresh();
+        void this.sandbox.refresh();
         this.postModels();
         this.renderStatus();
       }),
@@ -220,6 +229,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
           void this.connection.setClient(this.client);
         }
         this.engine?.setBudget(this.budget() || undefined, next.context.budgetPercent);
+        this.postSettings();
         this.postModels();
         this.renderStatus();
       }),
@@ -228,6 +238,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
 
   private readonly workspace: ChangesetWorkspace;
   private readonly providers: ProviderSetup;
+  private readonly sandbox: SandboxSetup;
 
   /* ------------------------------------------------------------------ */
   /* Startup                                                             */
@@ -361,6 +372,45 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     this.send({ type: 'models.update', models: this.pricing.enrich(v.models), chain: v.chain, agentModel: v.agentModel, inlineModel: v.inlineModel });
   }
 
+  private settingsSnapshot(): SettingsSnapshot {
+    const s = getSettings();
+    const cfg = vscode.workspace.getConfiguration('temper');
+    const overrides = cfg.get<Record<string, unknown>>('pricing.overrides') ?? {};
+    return {
+      fallback: s.models.fallback,
+      context: { budgetTokens: this.budget(), budgetPercent: s.context.budgetPercent, exclude: s.context.exclude },
+      review: { mode: s.review.mode },
+      guards: s.guards,
+      commands: s.commands,
+      pricing: { fetch: cfg.get<boolean>('pricing.fetch') ?? true, overrideCount: Object.keys(overrides).length },
+    };
+  }
+
+  private postSettings(): void {
+    this.send({ type: 'settings.state', settings: this.settingsSnapshot() });
+  }
+
+  private async updateSetting(key: string, value: unknown): Promise<void> {
+    const check = validateSetting(key, value);
+    if (!check.ok) {
+      this.log(`settings.update refused (${key}): ${check.reason}`);
+      this.notify('warn', check.reason);
+      this.postSettings();
+      return;
+    }
+    // The ledger's own budget control keeps a workspace override that would mask this setting.
+    if (key === 'context.budgetTokens') await this.context.workspaceState.update(BUDGET_KEY, check.value);
+    try {
+      await vscode.workspace
+        .getConfiguration('temper')
+        .update(key, check.value, vscode.ConfigurationTarget.Global);
+    } catch (e) {
+      this.notify('error', `Could not save temper.${key}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    this.engine?.setBudget(this.budget() || undefined, getSettings().context.budgetPercent);
+    this.postSettings();
+  }
+
   private postConnection(): void {
     const st = this.connection.state;
     this.send({
@@ -393,6 +443,8 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   }
 
   private send(m: HostMessage): void {
+    if (m.type === 'checkpoints.update')
+      void vscode.commands.executeCommand('setContext', 'temper.canUndo', m.canUndo);
     try {
       this.postFn?.(m);
     } catch {
@@ -517,6 +569,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.send({ type: 'editor.selection', selection: this.lastSelection });
         this.postConnection();
         this.postModels();
+        this.postSettings();
         this.controller.postCheckpoints();
         void this.connection.check();
         void this.sessions.restore();
@@ -536,6 +589,25 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         break;
       case 'providers.remove':
         void this.providers.remove(msg.name);
+        break;
+      case 'settings.refresh':
+        this.postSettings();
+        void this.sandbox.refresh();
+        break;
+      case 'settings.update':
+        void this.updateSetting(msg.key, msg.value);
+        break;
+      case 'settings.openJson':
+        if (isJsonOnlyKey(msg.key))
+          void vscode.commands.executeCommand('workbench.action.openSettingsJson', {
+            revealSetting: { key: `temper.${msg.key}`, edit: false },
+          });
+        break;
+      case 'sandbox.connect':
+        void this.sandbox.connect();
+        break;
+      case 'trueforge.open':
+        void vscode.env.openExternal(vscode.Uri.parse(this.baseUrl));
         break;
       case 'server.start':
         void this.providers.startServer();
@@ -832,6 +904,14 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     else this.queued.push(m);
   }
 
+  /** A view-title command: reveal the panel, then tell the webview to switch views. */
+  async navigate(to: 'newChat' | 'history' | 'settings'): Promise<void> {
+    await vscode.commands.executeCommand('workbench.view.extension.temper');
+    const m: HostMessage = { type: 'nav', to };
+    if (this.postFn && this.webviewReady) this.send(m);
+    else this.queued.push(m);
+  }
+
   cancel(): void {
     this.controller.cancel();
   }
@@ -856,7 +936,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       this.pricing.enrich(models).map((m) => ({
         label: m.name,
         description: m.name === current ? 'current' : m.provider,
-        detail: [m.contextLength ? `${fmtTokens(m.contextLength)} token context` : '', m.price ? `${formatPrice(m.price)} per 1M tokens` : ''].filter(Boolean).join(' · ') || undefined,
+        detail: m.price ? `${formatPrice(m.price)} per 1M tokens` : undefined,
       })),
       { title: `Temper: select the model for ${mode === 'agent' ? 'agent' : 'inline edit'} mode`, placeHolder: current || 'Choose a model' },
     );

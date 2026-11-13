@@ -111,21 +111,13 @@ export function summarizeArgs(args: unknown, max = 60): string {
 
 export { fmtTokens };
 
-const HEALTH_TONE: Record<ModelHealth, 'ok' | 'bad' | 'unknown'> = {
-  ok: 'ok',
-  failing: 'bad',
-  unknown: 'unknown',
-};
-
-/** Dot + word so health is never colour-only. */
+/** Health is shown only when a model is failing (never "ok" or "unknown"). Dot + word, never colour alone. */
 export function HealthPill({ health, lastError }: { health: ModelHealth; lastError?: string }) {
+  if (health !== 'failing') return null;
   return (
-    <span
-      className={`pill pill-${HEALTH_TONE[health]}`}
-      title={lastError ? `${health}: ${lastError}` : `Health: ${health}`}
-    >
+    <span className="pill pill-bad" title={lastError ? `Failing: ${lastError}` : 'Failing'}>
       <span className="dot" aria-hidden="true" />
-      {health}
+      failing
     </span>
   );
 }
@@ -314,23 +306,18 @@ export function ModelPicker({
   const options: PickerOption[] = models.map((m) => ({
     id: m.name,
     selected: m.name === value,
-    aria: `${m.name}, ${m.provider}, ${m.health}${m.name === value ? ', current' : ''}`,
+    aria: `${m.name}, ${m.provider}${m.health === 'failing' ? ', failing' : ''}${m.name === value ? ', current' : ''}`,
     node: (
       <>
-        <span
-          className={`dot dot-${HEALTH_TONE[m.health]}`}
-          aria-hidden="true"
-          title={m.lastError ?? `Health: ${m.health}`}
-        />
         <span className="opt-main">
           <span className="ellipsis opt-name">{shortModel(m.name)}</span>
-          <span className="ellipsis muted opt-sub">
+          <span className="ellipsis muted opt-sub" title={m.lastError}>
             {m.provider}
-            {m.contextLength ? ` · ${fmtTokens(m.contextLength)} ctx` : ''}
-            {m.price ? ` · ${formatPrice(m.price)}` : ''}
-            {m.health !== 'ok' ? ` · ${m.health}` : ''}
+            {m.price ? ` · ${formatPrice(m.price)} per 1M` : ''}
+            {m.health === 'failing' ? ` · failing${m.lastError ? `: ${m.lastError}` : ''}` : ''}
           </span>
         </span>
+        {m.health === 'failing' && <Icon name="warning" className="bad-text" />}
         {m.name === value && <Icon name="check" />}
       </>
     ),
@@ -373,9 +360,7 @@ export function ModelPicker({
           </>
         ) : (
           <>
-            {current && (
-              <span className={`dot dot-${HEALTH_TONE[current.health]}`} aria-hidden="true" />
-            )}
+            {current?.health === 'failing' && <Icon name="warning" className="bad-text" />}
             <span className="ellipsis" title={value}>
               {value || 'Choose a model'}
             </span>

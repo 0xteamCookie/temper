@@ -5,6 +5,8 @@ import type { EditorSelection } from '../../src/shared/messages';
 import type { SessionSummary, TranscriptTurn } from '../../src/shared/sessions';
 import type { HostMessage, Mention, WebviewMessage } from './vscode';
 import { setMockHandler } from './vscode';
+import { DEFAULT_SNAPSHOT, validateSetting } from '../../src/shared/settings';
+import type { SandboxState, SettingsSnapshot } from '../../src/shared/settings';
 import { bindProviders, providersHandle } from './demoProviders';
 
 const send = (m: HostMessage) => window.postMessage(m, '*');
@@ -23,6 +25,39 @@ let runN = 0;
 let runId = 'run-0';
 const SEL: EditorSelection = { path: 'src/flask/helpers.py', startLine: 42, endLine: 58 };
 let selOn = true;
+let settings: SettingsSnapshot = structuredClone(DEFAULT_SNAPSHOT);
+let sandbox: SandboxState = {
+  loaded: true,
+  connected: false,
+  skills: { enabled: false, reason: 'Skills run in a sandbox, which is not configured.' },
+  busy: false,
+};
+const sendSettings = () => send({ type: 'settings.state', settings });
+const sendSandbox = () => send({ type: 'sandbox.state', state: sandbox });
+const sendServer = () => send({ type: 'server.info', server: { baseUrl: 'http://127.0.0.1:8790', version: '0.185.0' } });
+
+/** Mirrors the host's `settings.update`: same allowlist and validation, applied to a local snapshot. */
+function applySetting(key: string, value: unknown): void {
+  const c = validateSetting(key, value);
+  if (!c.ok) return console.warn('[temper dev] refused setting', key, c.reason);
+  const v = c.value as never;
+  const set: Record<string, () => void> = {
+    'models.fallback.enabled': () => (settings.fallback.enabled = v),
+    'models.fallback.retries': () => (settings.fallback.retries = v),
+    'context.budgetTokens': () => (settings.context.budgetTokens = v),
+    'context.budgetPercent': () => (settings.context.budgetPercent = v),
+    'context.exclude': () => (settings.context.exclude = v),
+    'review.mode': () => (settings.review.mode = v),
+    'guards.scopeFence': () => (settings.guards.scopeFence = v),
+    'guards.symbolCheck': () => (settings.guards.symbolCheck = v),
+    'commands.runInShadowWorktree': () => (settings.commands.runInShadowWorktree = v),
+    'pricing.fetch': () => (settings.pricing.fetch = v),
+  };
+  set[key]?.();
+  settings = structuredClone(settings);
+  sendSettings();
+}
+
 const sendModels = () => send({ type: 'models.update', models: MODELS, chain, agentModel, inlineModel });
 
 const reasons = (r: LedgerEntry['reasons']) => r;
@@ -276,6 +311,32 @@ function handle(m: WebviewMessage): void {
       sendModels();
       send({ type: 'checkpoints.update', canUndo: false });
       send({ type: 'editor.selection', selection: SEL });
+      sendSettings();
+      sendSandbox();
+      sendServer();
+      break;
+    case 'settings.refresh':
+      sendSettings();
+      sendSandbox();
+      sendServer();
+      break;
+    case 'settings.update':
+      applySetting(m.key, m.value);
+      break;
+    case 'sandbox.connect':
+      // The real host asks for the key in a VS Code password box; nothing is typed in the browser.
+      sandbox = { ...sandbox, busy: true, result: undefined };
+      sendSandbox();
+      window.setTimeout(() => {
+        sandbox = {
+          ...sandbox,
+          busy: false,
+          connected: true,
+          skills: { enabled: true },
+          result: { level: 'info', text: 'Daytona connected. (dev mock: no key was entered)' },
+        };
+        sendSandbox();
+      }, 600);
       break;
     case 'chat.send':
       replay(m.text, m.mentions, m.mode, m.selection);
@@ -364,4 +425,20 @@ export function startDemo(): void {
   document.documentElement.dataset.devTheme = 'dark';
   document.body.className = 'vscode-dark';
   setMockHandler(handle);
+}
+
+/** Dev bar: what the native view-title buttons do in VS Code. */
+export function navigate(to: 'newChat' | 'history' | 'settings'): void {
+  send({ type: 'nav', to });
+}
+
+/** Dev bar: preview the Sandbox section states. */
+export function setSandbox(mode: 'off' | 'on' | 'error'): void {
+  sandbox =
+    mode === 'on'
+      ? { loaded: true, connected: true, skills: { enabled: true }, busy: false }
+      : mode === 'error'
+        ? { loaded: true, connected: false, busy: false, error: 'Reading the sandbox provider failed (HTTP 500)' }
+        : { loaded: true, connected: false, busy: false, skills: { enabled: false, reason: 'Skills run in a sandbox, which is not configured.' } };
+  sendSandbox();
 }
