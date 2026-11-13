@@ -20,12 +20,19 @@ export default tseslint.config(
   {
     files: ['**/*.{ts,tsx}'],
     rules: {
+      'no-undef': 'off', // TypeScript checks undefined identifiers
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
   {
-    files: ['extension/src/**/*.ts', '*.mjs', 'extension/*.mjs'],
+    files: [
+      'extension/src/**/*.ts',
+      'extension/test/**/*.ts',
+      '*.mjs',
+      'extension/*.mjs',
+      'scripts/**/*.mjs',
+    ],
     languageOptions: { globals: globals.node },
   },
   {

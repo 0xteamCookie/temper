@@ -1,0 +1,45 @@
+name: Bug report
+description: Report something that does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: temper-version
+    attributes:
+      label: Temper version or commit
+    validations:
+      required: true
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+  - type: input
+    id: trueforge-version
+    attributes:
+      label: TrueForge version
+      placeholder: 0.185.0
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output from the Temper output channel or `.trueforge/tf.log`. Remove any API keys before pasting.
+      render: shell

@@ -1,0 +1,265 @@
+{
+  "name": "temper",
+  "displayName": "Temper",
+  "description": "A safety-first coding agent for VS Code, built on TrueForge.",
+  "version": "0.1.0",
+  "publisher": "temper",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xteamCookie/temper.git",
+    "directory": "extension"
+  },
+  "bugs": {
+    "url": "https://github.com/0xteamCookie/temper/issues"
+  },
+  "engines": {
+    "vscode": "^1.100.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "coding agent",
+    "trueforge",
+    "mcp"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "temper",
+          "title": "Temper",
+          "icon": "media/temper.svg"
+        }
+      ]
+    },
+    "views": {
+      "temper": [
+        {
+          "type": "webview",
+          "id": "temper.panel",
+          "name": "Temper"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "temper.inlineEdit",
+        "title": "Edit Selection",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.openPanel",
+        "title": "Open Panel",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.cancel",
+        "title": "Stop",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.undoLastChange",
+        "title": "Undo Last Agent Change",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.selectModel",
+        "title": "Select Model",
+        "category": "Temper"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "temper.inlineEdit",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Temper",
+      "properties": {
+        "temper.trueforge.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8790",
+          "markdownDescription": "Base URL of the local TrueForge server (the server root, not `/api/v1`). Change this if you run TrueForge on a different port or host."
+        },
+        "temper.trueforge.agent": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to an agent spec used for agent mode. Leave empty to use the spec bundled with the extension (`temper-agent.json`)."
+        },
+        "temper.trueforge.inlineAgent": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to an agent spec used for inline edits. Leave empty to use the bundled spec (`temper-inline.json`)."
+        },
+        "temper.models.chain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Ordered fallback chain of model names as configured in TrueForge, for example `provider/model`. When empty, you choose from the list TrueForge reports. Model API keys are never stored in VS Code settings."
+        },
+        "temper.models.agentMode": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Model used for agent mode. Leave empty to use the first model in `#temper.models.chain#`."
+        },
+        "temper.models.inlineEdit": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Model used for inline edits. Leave empty to use the first model in `#temper.models.chain#`."
+        },
+        "temper.models.fallback.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When a model request fails, retry and then move to the next model in `#temper.models.chain#`. A failed attempt does not modify the workspace."
+        },
+        "temper.models.fallback.retries": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 5,
+          "markdownDescription": "Number of retries on the same model before falling back to the next one."
+        },
+        "temper.context.budgetTokens": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Token budget for context packs. `0` means adaptive: `#temper.context.budgetPercent#` percent of the selected model context window."
+        },
+        "temper.context.budgetPercent": {
+          "type": "integer",
+          "default": 25,
+          "minimum": 1,
+          "maximum": 90,
+          "markdownDescription": "Share of the model context window used for context when `#temper.context.budgetTokens#` is `0`."
+        },
+        "temper.context.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".git",
+            "node_modules",
+            "dist",
+            "out",
+            ".venv",
+            "__pycache__"
+          ],
+          "markdownDescription": "Files and folders excluded from indexing and context packs."
+        },
+        "temper.review.mode": {
+          "type": "string",
+          "enum": [
+            "endOfRun",
+            "perEdit"
+          ],
+          "enumDescriptions": [
+            "Review all proposed changes together when the agent finishes.",
+            "Review each edit as the agent proposes it."
+          ],
+          "default": "endOfRun",
+          "markdownDescription": "When proposed changes are presented for review. Nothing is written to disk before you accept."
+        },
+        "temper.commands.allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "pytest",
+            "python -c",
+            "git diff",
+            "git status",
+            "flask --help"
+          ],
+          "markdownDescription": "Command prefixes the agent may run. Anything not listed is refused."
+        },
+        "temper.commands.runInShadowWorktree": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Run allowed commands in a throwaway copy of the workspace that includes the pending changes, instead of in your working tree."
+        },
+        "temper.guards.scopeFence": {
+          "type": "string",
+          "enum": [
+            "flagAndReject",
+            "block",
+            "warn",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Flag edits outside the requested scope and reject them by default in review.",
+            "Block edits outside the requested scope.",
+            "Warn about edits outside the requested scope.",
+            "Disable the Scope Fence."
+          ],
+          "default": "flagAndReject",
+          "markdownDescription": "How the Scope Fence treats edits that fall outside the scope of the request (for inline edits, the selection)."
+        },
+        "temper.guards.symbolCheck": {
+          "type": "string",
+          "enum": [
+            "bounceThenWarn",
+            "bounce",
+            "warn",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Return unresolved symbols to the agent once, then warn if they persist.",
+            "Always return unresolved symbols to the agent.",
+            "Warn about unresolved symbols in review.",
+            "Disable Symbol Check."
+          ],
+          "default": "bounceThenWarn",
+          "markdownDescription": "How Symbol Check treats references to symbols that cannot be resolved in the workspace."
+        },
+        "temper.mcp.port": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 65535,
+          "markdownDescription": "Port for the extension local MCP server on `127.0.0.1`. `0` picks a free port automatically."
+        },
+        "temper.ui.showLedger": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the Context Ledger in the Temper panel."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/vscode": "1.100.0",
+    "@vscode/vsce": "^4.1.1",
+    "esbuild": "^0.28.2",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@truefoundry/trueforge-sdk": "0.185.0",
+    "diff": "^8.0.4",
+    "zod": "^4.6.7"
+  }
+}
