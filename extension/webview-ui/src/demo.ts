@@ -11,10 +11,10 @@ const send = (m: HostMessage) => window.postMessage(m, '*');
 const ev = (event: RunEvent) => send({ type: 'run.event', event });
 
 const MODELS: ModelInfo[] = [
-  { name: 'anthropic/claude-sonnet', provider: 'anthropic', health: 'failing', lastError: '[Model Error] Request failed (429)', contextLength: 200000 },
-  { name: 'openai/gpt-5', provider: 'openai', health: 'ok', contextLength: 128000 },
-  { name: 'google/gemini-pro', provider: 'google', health: 'unknown', contextLength: 1048576 },
-  { name: 'local/qwen-coder', provider: 'local', health: 'ok', contextLength: 32768 },
+  { name: 'anthropic/claude-sonnet', provider: 'anthropic', health: 'failing', lastError: '[Model Error] Request failed (429)', contextLength: 1_000_000, price: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 } },
+  { name: 'openai/gpt-5', provider: 'openai', health: 'ok', contextLength: 400_000, price: { input: 1.25, output: 10, cacheRead: 0.125 } },
+  { name: 'google/gemini-pro', provider: 'google', health: 'unknown', contextLength: 1_048_576 },
+  { name: 'local/qwen-coder', provider: 'local', health: 'ok', contextLength: 32_768, price: { input: 0, output: 0 } },
 ];
 let chain = ['anthropic/claude-sonnet', 'openai/gpt-5', 'google/gemini-pro'];
 let agentModel = 'anthropic/claude-sonnet';
@@ -319,7 +319,7 @@ function handle(m: WebviewMessage): void {
       send({ type: 'review.closed', runId, applied: 3, rejected: 1 });
       send({ type: 'checkpoints.update', canUndo: true, lastLabel: 'FLASK_DEBUG fix' });
       ev({ kind: 'status', runId, status: 'running' });
-      at(500, () => ev({ kind: 'done', runId, status: 'done', metrics: { inputTokens: 12400, outputTokens: 860, toolCalls: 4, durationMs: 14200 } }));
+      at(500, () => ev({ kind: 'done', runId, status: 'done', metrics: { inputTokens: 12400, outputTokens: 860, cacheReadTokens: 8000, toolCalls: 4, durationMs: 14200, usage: [{ model: agentModel, inputTokens: 12400, outputTokens: 860, cacheReadTokens: 8000 }] } }));
       break;
     case 'history.list': {
       const start = m.pageToken ? Number(m.pageToken) : 0;

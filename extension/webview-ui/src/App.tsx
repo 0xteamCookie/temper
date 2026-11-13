@@ -5,6 +5,7 @@ import { Header, SubHeader } from './components/Header';
 import { History } from './components/History';
 import { Models } from './components/Models';
 import { Review } from './components/Review';
+import { PriceProvider, SessionUsage } from './components/Usage';
 import { Icon } from './components/ui';
 import { initialState, isRunning, reducer } from './state';
 import { isVsCode, onHostMessage, postToHost } from './vscode';
@@ -68,6 +69,7 @@ export function App() {
   const files = state.review?.changes.length ?? 0;
 
   return (
+    <PriceProvider models={state.models}>
     <div className="app">
       <Header
         state={state}
@@ -145,6 +147,7 @@ export function App() {
       )}
 
       <div hidden={view !== 'conversation'}>
+        <SessionUsage items={state.items} />
         <Composer
           running={running}
           reviewPending={!!state.review}
@@ -170,5 +173,6 @@ export function App() {
         </Suspense>
       )}
     </div>
+    </PriceProvider>
   );
 }

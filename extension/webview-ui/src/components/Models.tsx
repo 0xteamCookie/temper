@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ModelInfo } from '../../../src/shared/types';
+import { formatPrice } from '../../../src/shared/usage';
 import { postToHost } from '../vscode';
 import type { ProviderPanelState } from '../../../src/shared/providers';
 import { Providers, ServerDown } from './Providers';
@@ -85,6 +86,7 @@ export function Models({
           {m.contextLength ? ` · ${fmtTokens(m.contextLength)} context` : ''}
           {m.name === agentModel ? ' · Agent' : ''}
           {m.name === inlineModel ? ' · Inline' : ''}
+          {m.price ? ` · ${formatPrice(m.price)} per 1M` : ''}
           {m.health === 'failing' && m.lastError ? ` · ${m.lastError}` : ''}
         </span>
       </span>

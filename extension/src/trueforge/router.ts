@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { FailureKind, ModelHealth, RunEvent, RunMode } from '../shared/types';
+import type { FailureKind, ModelHealth, ModelUsage, RunEvent, RunMetrics, RunMode } from '../shared/types';
+import { mergeUsage } from '../shared/usage';
 import type { AgentSpec, TrueForgeClientLike } from './client';
 import { sessionMetadata } from './namedAgent';
 import type { AgentRef } from './namedAgent';
@@ -73,6 +74,23 @@ function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** Add usage from earlier failed attempts to a done event's metrics. */
+function withSpent(ev: Extract<RunEvent, { kind: 'done' }>, spent: ModelUsage[]): Extract<RunEvent, { kind: 'done' }> {
+  if (spent.length === 0) return ev;
+  const usage = mergeUsage([...spent, ...(ev.metrics?.usage ?? [])]);
+  const sum = (f: (u: ModelUsage) => number | undefined) => usage.reduce((n, u) => n + (f(u) ?? 0), 0);
+  const metrics: RunMetrics = {
+    ...ev.metrics,
+    usage,
+    inputTokens: sum((u) => u.inputTokens),
+    outputTokens: sum((u) => u.outputTokens),
+    cacheReadTokens: sum((u) => u.cacheReadTokens),
+    cacheWriteTokens: sum((u) => u.cacheWriteTokens),
+    reasoningTokens: sum((u) => u.reasoningTokens),
+  };
+  return { ...ev, metrics };
+}
+
 interface Attempt {
   model: string;
   kind: FailureKind;
@@ -112,7 +130,9 @@ export class ModelRouter {
   async run(req: RunRequest): Promise<RunResult> {
     const runId = req.runId ?? randomUUID();
     const { signal } = req;
-    const emit = (ev: RunEvent) => req.onEvent(ev);
+    // Usage burned by failed attempts (a fallback can switch models mid-run) is folded into the final done event.
+    const spent: ModelUsage[] = [];
+    const emit = (ev: RunEvent) => req.onEvent(ev.kind === 'done' ? withSpent(ev, spent) : ev);
     let models = this.order(req.pick);
     if (req.session) {
       const m = req.session.model;
@@ -149,6 +169,7 @@ export class ModelRouter {
           return { status: 'cancelled', runId, model, sessionId: outcome.sessionId, turnId: outcome.turnId };
         }
         // failure
+        if (outcome.usage) spent.push(...outcome.usage);
         last = { model, kind: outcome.kind, message: outcome.message };
         this.mark(model, 'failing', outcome.message);
 
@@ -201,7 +222,7 @@ export class ModelRouter {
   ): Promise<
     | { type: 'done'; done: Extract<RunEvent, { kind: 'done' }>; sessionId: string; turnId?: string }
     | { type: 'cancelled'; done: Extract<RunEvent, { kind: 'done' }>; sessionId?: string; turnId?: string }
-    | { type: 'failure'; kind: FailureKind; message: string; sessionId?: string; turnId?: string }
+    | { type: 'failure'; kind: FailureKind; message: string; sessionId?: string; turnId?: string; usage?: ModelUsage[] }
   > {
     const { signal } = req;
     let sessionId: string;
@@ -236,7 +257,7 @@ export class ModelRouter {
       }
       if (ev.kind === 'done') captured = ev;
       else emit(ev);
-    });
+    }, model);
 
     // Local controller so we can force-end the stream shortly after cancelling server side.
     const streamCtl = new AbortController();
@@ -276,6 +297,6 @@ export class ModelRouter {
     if (!captured) return { type: 'failure', kind: 'other', message: 'The TrueForge stream ended without a result.', sessionId, turnId };
     if (captured.status === 'done') return { type: 'done', done: captured, sessionId, turnId };
     const message = captured.message ?? 'Unknown error';
-    return { type: 'failure', kind: classifyFailure(message), message, sessionId, turnId };
+    return { type: 'failure', kind: classifyFailure(message), message, sessionId, turnId, usage: captured.metrics?.usage };
   }
 }

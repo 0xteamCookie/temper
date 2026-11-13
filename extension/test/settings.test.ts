@@ -46,6 +46,6 @@ describe('readSettings', () => {
     );
     const viaReader = readerFrom(declared);
     expect(readSettings(viaReader)).toEqual(DEFAULT_SETTINGS);
-    expect(Object.keys(declared)).toHaveLength(18);
+    expect(Object.keys(declared)).toHaveLength(20);
   });
 });

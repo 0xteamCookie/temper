@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { ReactNode } from 'react';
 import type { ModelHealth, ModelInfo } from '../../../src/shared/types';
 import { fmtTokens } from '../../../src/shared/format';
+import { formatPrice } from '../../../src/shared/usage';
 import { postToHost } from '../vscode';
 
 /* ------------------------------ icons ------------------------------ */
@@ -326,6 +327,7 @@ export function ModelPicker({
           <span className="ellipsis muted opt-sub">
             {m.provider}
             {m.contextLength ? ` · ${fmtTokens(m.contextLength)} ctx` : ''}
+            {m.price ? ` · ${formatPrice(m.price)}` : ''}
             {m.health !== 'ok' ? ` · ${m.health}` : ''}
           </span>
         </span>

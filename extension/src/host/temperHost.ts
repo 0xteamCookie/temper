@@ -5,6 +5,9 @@ import * as vscode from 'vscode';
 import { fmtTokens } from '../shared/format';
 import { ContextEngine, createGetContextTool, createNodeReader } from '../context';
 import { getSettings } from '../config';
+import { formatPrice } from '../shared/usage';
+import { createPricingService } from '../pricing';
+import type { PricingService } from '../pricing';
 import { startMcpServer, readOnlyTools } from '../mcp';
 import type { RunningMcpServer, TemperTool } from '../mcp';
 import { addToHistory, promptInstruction } from '../inline';
@@ -112,6 +115,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   private readonly root = workspaceRootPath();
   private readonly client: ClientProxy;
   private readonly connection: TrueForgeConnection;
+  private readonly pricing: PricingService;
   private readonly editorReview: EditorReview;
   private readonly controller: RunController;
   private readonly sessions: SessionCoordinator;
@@ -133,6 +137,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     this.client = new ClientProxy(
       new TrueForgeClient({ baseUrl: this.baseUrl, log: (l) => this.log(l) }),
     );
+    this.pricing = createPricingService(context, (l) => this.log(l));
     this.connection = new TrueForgeConnection(this.client);
     this.connection.onLog = (l) => this.log(l);
     this.providers = new ProviderSetup({
@@ -229,6 +234,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   /* ------------------------------------------------------------------ */
 
   async init(): Promise<void> {
+    void this.pricing.init().then((changed) => changed && this.postModels());
     if (this.root) {
       try {
         const settings = getSettings();
@@ -352,13 +358,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
 
   private postModels(): void {
     const v = this.modelView();
-    this.send({
-      type: 'models.update',
-      models: v.models,
-      chain: v.chain,
-      agentModel: v.agentModel,
-      inlineModel: v.inlineModel,
-    });
+    this.send({ type: 'models.update', models: this.pricing.enrich(v.models), chain: v.chain, agentModel: v.agentModel, inlineModel: v.inlineModel });
   }
 
   private postConnection(): void {
@@ -853,15 +853,12 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     const view = this.modelView();
     const current = mode === 'agent' ? view.agentModel : view.inlineModel;
     const pick = await vscode.window.showQuickPick(
-      models.map((m) => ({
+      this.pricing.enrich(models).map((m) => ({
         label: m.name,
         description: m.name === current ? 'current' : m.provider,
-        detail: m.contextLength ? `${fmtTokens(m.contextLength)} token context` : undefined,
+        detail: [m.contextLength ? `${fmtTokens(m.contextLength)} token context` : '', m.price ? `${formatPrice(m.price)} per 1M tokens` : ''].filter(Boolean).join(' · ') || undefined,
       })),
-      {
-        title: `Temper: select the model for ${mode === 'agent' ? 'agent' : 'inline edit'} mode`,
-        placeHolder: current || 'Choose a model',
-      },
+      { title: `Temper: select the model for ${mode === 'agent' ? 'agent' : 'inline edit'} mode`, placeHolder: current || 'Choose a model' },
     );
     if (!pick) return;
     await vscode.workspace

@@ -21,9 +21,32 @@ export type RunEvent =
   | { kind: 'retry'; runId: string; model: string; attempt: number; delayMs: number; reason: string }
   | { kind: 'done'; runId: string; status: 'done' | 'error' | 'cancelled'; message?: string; metrics?: RunMetrics };
 
+/** USD per 1M tokens. All zero = free. */
+export interface ModelPrice {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+/** Token usage of one model within a run (a fallback can switch models mid-run). */
+export interface ModelUsage {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  reasoningTokens?: number;
+}
+
 export interface RunMetrics {
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  reasoningTokens?: number;
+  /** Per-model breakdown (summed over fallback attempts). */
+  usage?: ModelUsage[];
   toolCalls?: number;
   durationMs?: number;
 }
@@ -141,6 +164,8 @@ export interface ModelInfo {
   name: string; // TrueForge model name "<provider>/<alias>"
   provider: string;
   contextLength?: number;
+  /** Estimated price from models.dev or a user override; undefined = unknown. */
+  price?: ModelPrice;
   health: ModelHealth;
   lastError?: string;
 }

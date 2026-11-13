@@ -4,8 +4,9 @@ import { Markdown } from '../markdown';
 import type { Block, ChatItem, RunItem } from '../state';
 import { postToHost } from '../vscode';
 import { ContextCard } from './ContextCard';
+import { RunUsage } from './Usage';
 import { categorize, fileTarget, plainTarget, summarizeTools } from './tools';
-import { FileLink, fmtRange, fmtTokens, Icon, shortModel, Spinner, splitPath, summarizeArgs } from './ui';
+import { FileLink, fmtRange, Icon, shortModel, Spinner, splitPath, summarizeArgs } from './ui';
 
 type ToolBlock = Extract<Block, { type: 'tool' }>;
 
@@ -254,8 +255,6 @@ function Run({
   const status = run.status;
   const metrics = m
     ? [
-        m.inputTokens != null && `${fmtTokens(m.inputTokens)} in`,
-        m.outputTokens != null && `${fmtTokens(m.outputTokens)} out`,
         m.toolCalls != null && `${m.toolCalls} tool calls`,
         m.durationMs != null && `${Math.round(m.durationMs / 1000)}s`,
       ].filter(Boolean)
@@ -303,6 +302,7 @@ function Run({
             <strong>{status === 'done' ? 'Done' : status === 'cancelled' ? 'Cancelled' : 'Error'}</strong>
             {run.message && <span className="muted"> — {run.message}</span>}
           </div>
+          <RunUsage run={run} />
           {metrics.length > 0 && <div className="muted small">{metrics.join(' · ')}</div>}
         </footer>
       )}
