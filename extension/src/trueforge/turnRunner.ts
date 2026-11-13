@@ -116,7 +116,8 @@ export class TurnRunner {
   private lastWasShellOf?: string;
   private createdAt?: string;
 
-  constructor(private readonly runId: string, private readonly emit: Emit) {}
+  /** `model` (TrueForge name) labels the per-model usage in the final metrics. */
+  constructor(private readonly runId: string, private readonly emit: Emit, private readonly model?: string) {}
 
   feed(ev: RawEvent): void {
     if (this.finished) return;
@@ -305,8 +306,23 @@ export class TurnRunner {
     const metrics: RunMetrics = {
       inputTokens: num(g(m, 'totalInputTokens', 'total_input_tokens')),
       outputTokens: num(g(m, 'totalOutputTokens', 'total_output_tokens')),
+      cacheReadTokens: num(g(m, 'totalCacheReadTokens', 'total_cache_read_tokens')),
+      cacheWriteTokens: num(g(m, 'totalCacheWriteTokens', 'total_cache_write_tokens')),
+      reasoningTokens: num(g(m, 'totalReasoningTokens', 'total_reasoning_tokens')),
       toolCalls: this.toolCallCount,
     };
+    if (this.model && (metrics.inputTokens != null || metrics.outputTokens != null)) {
+      metrics.usage = [
+        {
+          model: this.model,
+          inputTokens: metrics.inputTokens ?? 0,
+          outputTokens: metrics.outputTokens ?? 0,
+          cacheReadTokens: metrics.cacheReadTokens,
+          cacheWriteTokens: metrics.cacheWriteTokens,
+          reasoningTokens: metrics.reasoningTokens,
+        },
+      ];
+    }
     if (this.createdAt && completedAt) {
       const d = Date.parse(completedAt) - Date.parse(this.createdAt);
       if (Number.isFinite(d)) metrics.durationMs = d;

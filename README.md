@@ -130,6 +130,8 @@ All settings are under `temper.*`. API keys never go in settings.
 | `temper.guards.symbolCheck`           | `bounceThenWarn`                                        | `bounceThenWarn`, `bounce`, `warn`, `off`                  |
 | `temper.mcp.port`                     | `0`                                                     | Port of the MCP server on `127.0.0.1` (`0` = free)         |
 | `temper.ui.showLedger`                | `true`                                                  | Show the Context Ledger in the panel                       |
+| `temper.pricing.fetch`                | `true`                                                  | Fetch model prices from models.dev (at most once a day)    |
+| `temper.pricing.overrides`            | `{}`                                                    | Your own prices per model, USD per 1M tokens               |
 
 ## Models and fallback
 
@@ -143,6 +145,10 @@ Model setup has four layers, each with one job:
 Registered models show up in TrueForge as `<provider>/<alias>` and in Temper's model list. [config/models.example.json](config/models.example.json) is an example chain and per-mode picks, with the matching `temper.models.*` setting for each field; see [config/README.md](config/README.md). Copy the values into your VS Code settings, or set the chain in the panel's Models view.
 
 When a request fails, Temper retries on the same model `temper.models.fallback.retries` times, then replays the turn on the next model in the chain. A failed turn has produced no workspace changes, so the replay is safe.
+
+## Usage and cost
+
+Each finished run shows its tokens and an estimated cost (`12.4k in · 1.8k out · ≈ $0.03 · claude-sonnet-5-5`), and a session total sits above the composer. TrueForge reports tokens but no prices, so Temper prices them itself from the [models.dev](https://models.dev) index (MIT). It downloads the index at most once a day, keeps only the price and context size of each model, and falls back to a small bundled snapshot offline (`scripts/update-pricing-snapshot.mjs` regenerates it). Cost counts cached input at the cache price and sums per model when a run falls back to another one. Local Ollama models show as free; models with no known price show `—`, not $0. Costs are estimates, not a bill. Set `temper.pricing.fetch` to `false` to stop the download, and `temper.pricing.overrides` to price a model yourself.
 
 ## Reproducing the Round 1 tasks
 

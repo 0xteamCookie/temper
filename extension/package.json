@@ -323,6 +323,27 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show the Context Ledger in the Temper panel."
+        },
+        "temper.pricing.fetch": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Download model prices from [models.dev](https://models.dev) (at most once per day) to show estimated cost per run and per session. When off, Temper uses the small bundled price list and your `#temper.pricing.overrides#`. Only the public price index is requested; nothing about your code or usage is sent."
+        },
+        "temper.pricing.overrides": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Your own prices, which win over models.dev. Keys are TrueForge model names, values are USD per 1M tokens, for example `{ \"openrouter/my-model\": { \"input\": 0.5, \"output\": 1.5, \"cacheRead\": 0.05 } }`. `cacheRead` and `cacheWrite` are optional. Costs shown in the panel are estimates.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "input": { "type": "number", "minimum": 0 },
+              "output": { "type": "number", "minimum": 0 },
+              "cacheRead": { "type": "number", "minimum": 0 },
+              "cacheWrite": { "type": "number", "minimum": 0 }
+            },
+            "required": ["input", "output"],
+            "additionalProperties": false
+          }
         }
       }
     },

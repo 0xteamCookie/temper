@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { ModelInfo } from '../../../src/shared/types';
+import { fmtTokens } from '../../../src/shared/format';
+import { formatPrice } from '../../../src/shared/usage';
 import { postToHost } from '../vscode';
 import { HealthPill, Icon, IconButton, ModelPicker, shortModel } from './ui';
 
@@ -68,6 +70,8 @@ export function Models({
         </span>
         <span className="ellipsis muted small">
           {m.provider}
+          {m.contextLength ? ` · ${fmtTokens(m.contextLength)} ctx` : ''}
+          {m.price ? ` · ${formatPrice(m.price)} per 1M` : ''}
           {m.health === 'failing' && m.lastError ? ` · ${m.lastError}` : ''}
         </span>
       </span>

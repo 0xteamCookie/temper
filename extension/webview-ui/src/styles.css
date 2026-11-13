@@ -303,6 +303,8 @@ kbd {
 .run-meta .codicon { font-size: 14px; }
 .run-live { display: flex; align-items: center; gap: 6px; }
 .run-foot { display: flex; flex-direction: column; gap: 2px; }
+.usage-line { font-variant-numeric: tabular-nums; }
+.usage-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 0; font-variant-numeric: tabular-nums; }
 .run-status { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
 .run-done .run-status .codicon { color: var(--t-ok); }
 .run-error .run-status .codicon { color: var(--t-bad); }
