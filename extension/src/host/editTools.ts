@@ -11,6 +11,7 @@ import type { ScopeFlag } from '../shared/types';
 import { checkCommand } from './commandPolicy';
 import { runArgv } from './commandRunner';
 import { shadowEnv } from './shadow';
+import { STAGING_WAIT_MS, stagingOf } from './stagingTracker';
 import type { ShadowWorktree } from './shadow';
 import { namesFromStaged } from './symbolIndex';
 
@@ -98,6 +99,8 @@ const proposeEdit = (getRun: () => EditToolRun | undefined) =>
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     async handler({ path, old_string, new_string, rationale }, ctx) {
       const run = need(getRun);
+      // Tracked so submit_changeset (possibly in the same batch) can wait for staging to finish.
+      return stagingOf(run).track(async () => {
       if (ctx.signal?.aborted) throw new ToolError('The run was cancelled.');
       const mode = run.settings().guards.symbolCheck;
 
@@ -142,6 +145,7 @@ const proposeEdit = (getRun: () => EditToolRun | undefined) =>
         text += `\nWarning: unresolved symbols ${warn.unknown.join(', ')} were flagged for the reviewer. Double-check them with find_symbol.`;
       }
       return text;
+      });
     },
   });
 
@@ -159,9 +163,11 @@ const createFile = (getRun: () => EditToolRun | undefined) =>
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     async handler({ path, content, rationale }) {
       const run = need(getRun);
-      const r = await run.changeset.createFile(path, content, rationale);
-      if (!r.ok) throw new ToolError(r.message);
-      return `Staged new file ${r.path}. Not written yet: the user reviews at submit_changeset.`;
+      return stagingOf(run).track(async () => {
+        const r = await run.changeset.createFile(path, content, rationale);
+        if (!r.ok) throw new ToolError(r.message);
+        return `Staged new file ${r.path}. Not written yet: the user reviews at submit_changeset.`;
+      });
     },
   });
 
@@ -170,13 +176,20 @@ const submitChangeset = (getRun: () => EditToolRun | undefined) =>
     name: 'submit_changeset',
     description:
       'Submit all staged edits for the user to review hunk by hunk. The user approves or rejects each hunk; only accepted hunks are written. ' +
-      'Call once when your edits are complete and verified. If it is denied, read the reason, revise your edits and submit again.',
+      'Call once, only after propose_edit/create_file have returned successfully (never in the same batch as them). If it is denied, read the reason, revise your edits and submit again.',
     inputSchema: z.object({
       summary: z.string().describe('Concise summary of what changed and why'),
     }),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     async handler({ summary }) {
       const run = need(getRun);
+      // propose_edit may be in the same batch: let it finish staging before looking at the changeset.
+      await stagingOf(run).settle(STAGING_WAIT_MS);
+      if (run.changeset.isEmpty()) {
+        throw new ToolError(
+          'Nothing is staged. Make edits with propose_edit or create_file first and wait for them to return successfully, then call submit_changeset.',
+        );
+      }
       try {
         return await run.applySubmitted(summary);
       } catch (e) {

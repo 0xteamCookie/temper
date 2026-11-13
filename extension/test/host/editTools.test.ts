@@ -12,6 +12,7 @@ import type { TemperTool } from '../../src/mcp';
 import { applySymbolFlags, createEditTools } from '../../src/host/editTools';
 import type { EditToolRun } from '../../src/host/editTools';
 import { ShadowWorktree } from '../../src/host/shadow';
+import { StagingTracker } from '../../src/host/stagingTracker';
 
 let root: string;
 let shadow: ShadowWorktree | undefined;
@@ -158,6 +159,7 @@ describe('create_file and submit_changeset', () => {
 
   it('submit_changeset is destructive-hinted and delegates to the run', async () => {
     const run = makeRun(settings());
+    await run.changeset.stage('app.py', '    return False', '    return True', 'flip');
     const t = tool(run, 'submit_changeset');
     expect(t.annotations.destructiveHint).toBe(true);
     expect(await call(t, { summary: 'done' })).toMatch(/Applied 1 hunk/);
@@ -166,6 +168,77 @@ describe('create_file and submit_changeset', () => {
 
   it('run_command is read-only from the harness perspective', () => {
     expect(tool(makeRun(settings()), 'run_command').annotations.readOnlyHint).toBe(true);
+  });
+});
+
+describe('same-batch propose_edit + submit_changeset', () => {
+  const EDIT = { path: 'app.py', old_string: '    return False', new_string: '    return run', rationale: 'flip' };
+
+  it('submit waits for an in-flight propose_edit before inspecting the changeset', async () => {
+    const run = makeRun(settings());
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    run.symbolIndex = async () => {
+      await gate; // holds propose_edit before it can stage
+      return new SimpleSymbolIndex(['get_debug_flag', 'run']);
+    };
+    const seenAtApply: boolean[] = [];
+    run.applySubmitted = async (summary) => {
+      seenAtApply.push(run.changeset.isEmpty());
+      run.submitted.push(summary);
+      return 'Applied 1 hunk in app.py; rejected 0 (none).';
+    };
+    const edit = call(tool(run, 'propose_edit'), EDIT);
+    const submit = call(tool(run, 'submit_changeset'), { summary: 'flip it' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(run.submitted).toEqual([]); // submit has not run ahead of the edit
+    release();
+    expect(await edit).toContain('Staged edit');
+    expect(await submit).toMatch(/Applied 1 hunk/);
+    expect(seenAtApply).toEqual([false]);
+  });
+
+  it('returns an actionable error at once when nothing is staged and nothing is in flight', async () => {
+    const run = makeRun(settings());
+    const t0 = Date.now();
+    await expect(call(tool(run, 'submit_changeset'), { summary: 'x' })).rejects.toThrow(/Nothing is staged.*propose_edit/);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(run.submitted).toEqual([]);
+  });
+
+  it('a failed in-flight edit releases the waiter, which then reports nothing staged', async () => {
+    const run = makeRun(settings({ symbolCheck: 'off' }));
+    const edit = call(tool(run, 'propose_edit'), { ...EDIT, old_string: 'no such text' });
+    const submit = call(tool(run, 'submit_changeset'), { summary: 'x' });
+    await expect(edit).rejects.toThrow();
+    await expect(submit).rejects.toThrow(/Nothing is staged/);
+  });
+});
+
+describe('StagingTracker', () => {
+  it('settles immediately when idle, waits for begin/end pairs, and times out', async () => {
+    const t = new StagingTracker();
+    expect(await t.settle(10)).toBe(true);
+    t.begin('a');
+    t.begin('b');
+    let done = false;
+    const w = t.settle(1000).then((v) => ((done = v), v));
+    t.end('a');
+    await Promise.resolve();
+    expect(done).toBe(false);
+    t.end('b');
+    expect(await w).toBe(true);
+    t.begin('stuck');
+    expect(await t.settle(20)).toBe(false);
+    t.clear();
+    expect(await t.settle(20)).toBe(true);
+  });
+  it('track() registers synchronously and releases on failure', async () => {
+    const t = new StagingTracker();
+    const p = t.track(() => Promise.reject(new Error('boom')));
+    expect(t.pending).toBe(1);
+    await expect(p).rejects.toThrow('boom');
+    expect(t.pending).toBe(0);
   });
 });
 

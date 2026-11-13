@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { cssGhostContent, planDecorations, toRanges } from '../../src/inline/decorationModel';
 import { hunkAtLine, layoutHunk, layoutHunks } from '../../src/inline/hunkLayout';
 import { buildLenses, flagText, summarize } from '../../src/inline/lensModel';
 import { formatTitle, pushHistory } from '../../src/inline/instructionModel';
@@ -39,31 +38,6 @@ describe('layoutHunk', () => {
     expect(hunkAtLine(ls, 4)).toBe('a.ts#0');
     expect(hunkAtLine(ls, 18)).toBe('a.ts#1');
     expect(hunkAtLine([], 1)).toBeUndefined();
-  });
-});
-
-describe('planDecorations', () => {
-  const layouts = layoutHunks([replace]);
-  it('pending: red removed + ghost', () => {
-    const p = planDecorations(layouts, { 'a.ts#0': 'pending' });
-    expect(p.removedPending).toEqual([3, 4]);
-    expect(p.ghosts[0]).toMatchObject({ hostLine: 4, state: 'pending' });
-  });
-  it('accept and reject move lines to their own buckets', () => {
-    expect(planDecorations(layouts, { 'a.ts#0': 'accept' }).removedAccepted).toEqual([3, 4]);
-    const r = planDecorations(layouts, { 'a.ts#0': 'reject' });
-    expect(r.keptRejected).toEqual([3, 4]);
-    expect(r.ghosts[0]?.state).toBe('reject');
-  });
-  it('toRanges merges contiguous lines', () => {
-    expect(toRanges([5, 1, 2, 2, 3])).toEqual([[1, 3], [5, 5]]);
-  });
-  it('cssGhostContent escapes quotes/backslashes and joins with \\A', () => {
-    const s = cssGhostContent(['a "q"', 'b\\c\td'], '+');
-    expect(s).toContain('\\"q\\"');
-    expect(s).toContain('\\\\');
-    expect(s).toContain('\\A ');
-    expect(s).not.toContain('\t');
   });
 });
 

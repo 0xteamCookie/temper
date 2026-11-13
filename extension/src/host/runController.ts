@@ -19,6 +19,7 @@ import type { ApprovalTarget, BridgeOutcome, DecisionOrigin } from './approvalBr
 import { applySymbolFlags } from './editTools';
 import type { EditToolRun, SymbolFlagRecord } from './editTools';
 import { buildSpec, loadSpecTemplate } from './specs';
+import { STAGING_TOOLS, STAGING_WAIT_MS, stagingOf } from './stagingTracker';
 import { ShadowWorktree } from './shadow';
 import { buildSymbolIndex } from './symbolIndex';
 
@@ -266,6 +267,10 @@ export class RunController {
     } catch {
       /* UI errors must never break the run */
     }
+    // Track staging calls announced by the model so a same-batch submit_changeset can wait for them.
+    if (ev.kind === 'toolCall' && STAGING_TOOLS.has(ev.name)) stagingOf(run).begin(`ev:${ev.id}`);
+    else if (ev.kind === 'toolResult') stagingOf(run).end(`ev:${ev.id}`);
+    else if (ev.kind === 'done') stagingOf(run).clear();
     if (ev.kind === 'approval') void this.handleApproval(run, ev);
   }
 
@@ -337,6 +342,10 @@ export class RunController {
     target: ApprovalTarget,
     send: (d: { status: 'allow' } | { status: 'deny'; reason: string }) => Promise<void>,
   ): Promise<void> {
+    // propose_edit/create_file may still be running (same batch as submit_changeset): open the
+    // review only after they have settled, then look at the changeset.
+    await stagingOf(run).settle(STAGING_WAIT_MS);
+    if (run.abort.signal.aborted) return;
     const cs = run.changeset;
     if (cs.isEmpty()) return send({ status: 'deny', reason: NOTHING_STAGED });
 

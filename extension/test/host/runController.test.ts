@@ -29,6 +29,8 @@ class FakeTrueForge implements TrueForgeClientLike {
   cancelled: string[] = [];
   toolResult = '';
   stageEdits = true;
+  /** propose_edit is announced first but only stages (and returns) after submit_changeset's approval arrived. */
+  lateStage = false;
   hangAfterApproval = false;
   controller!: RunController;
   private verdict?: (d: ApprovalDecision) => void;
@@ -39,13 +41,17 @@ class FakeTrueForge implements TrueForgeClientLike {
   }
   async *streamTurn(_sid: string, _text: string, _opts: StreamOptions = {}): AsyncIterable<RawEvent> {
     const cs = this.controller.active!.changeset;
-    if (this.stageEdits) {
+    if (this.stageEdits && !this.lateStage) {
       const r = await cs.stage('app.py', '    return 1', '    return 10', 'bump a');
       if (!r.ok) throw new Error(r.message);
       const r2 = await cs.stage('app.py', '    return 2', '    return 20', 'bump b');
       if (!r2.ok) throw new Error(r2.message);
     }
     yield { type: 'turn.created', id: 'e1', turnId: 't1' };
+    if (this.lateStage) {
+      yield { type: 'model.message', id: 'm0', threadId: 'main', model: { name: 'm/x' } };
+      yield { type: 'model.message.delta', id: 'm0', toolCalls: [{ toolInfo: { type: 'mcp', name: 'propose_edit', serverId: 'temper', serverName: 'temper' }, index: 0, id: 'c0', type: 'function', function: { name: 'propose_edit', arguments: '{"path":"app.py"}' } }] };
+    }
     yield { type: 'model.message', id: 'm1', threadId: 'main', model: { name: 'm/x' } };
     yield { type: 'model.message.delta', id: 'm1', toolCalls: [{ toolInfo: { type: 'mcp', name: 'submit_changeset', serverId: 'temper', serverName: 'temper' }, index: 0, id: 'c1', type: 'function', function: { name: 'submit_changeset', arguments: '' } }] };
     yield { type: 'model.message.delta', id: 'm1', toolCalls: [{ index: 0, function: { arguments: '{"summary":"bump values"}' } }] };
@@ -56,6 +62,11 @@ class FakeTrueForge implements TrueForgeClientLike {
     });
     yield { type: 'tool.approval_required', id: 'e2', threadId: 'main', toolCalls: [{ id: 'c1', sourceEventId: 'm1' }] };
     yield { type: 'turn.update', id: 'e3', state: { status: 'paused' } };
+    if (this.lateStage) {
+      await new Promise((r) => setTimeout(r, 150));
+      await cs.stage('app.py', '    return 1', '    return 10', 'bump a');
+      yield { type: 'tool.response', id: 'e3b', toolCallId: 'c0', threadId: 'main', content: 'Staged edit' };
+    }
     const decision = await waiting;
     if (decision === 'cancelled') {
       yield { type: 'turn.done', id: 'e9', state: { status: 'cancelled', reason: 'client-cancelled', metrics: {} } };
@@ -141,6 +152,20 @@ function setup() {
 }
 
 describe('RunController approval flow', () => {
+  it('opens the review only after a same-batch propose_edit has finished staging', async () => {
+    const { client, ui, controller } = setup();
+    client.lateStage = true;
+    ui.onOpen = (p) => {
+      p.handlers.onDecideAll('accept');
+      p.handlers.onSubmit();
+    };
+    await controller.start({ mode: 'agent', prompt: 'bump' });
+    expect(client.approvals).toEqual([{ status: 'allow' }]); // not "Nothing is staged"
+    expect(ui.opened).toHaveLength(1);
+    expect(ui.opened[0]!.files[0]!.hunks.length).toBeGreaterThan(0);
+    expect(disk()).toContain('return 10');
+  });
+
   it('accepted hunks are applied through the submit_changeset handler, with a checkpoint', async () => {
     const { client, ui, controller } = setup();
     ui.onOpen = (p) => {
