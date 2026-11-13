@@ -17,6 +17,8 @@
 //   docs pairing (name/module/syms)  5 x strength x origin scale
 //   import graph: imported by O       2.5 x origin scale;  imports O: 2 x origin scale
 //   reference: file uses a queried identifier   3 (tests 2)
+//   registration/usage site of a top-ranked definition   7 x 1.4 when the line registers it (add_command(x), register(x)...)
+//   task intent (cli/test/docs/route/config option)     2-4 (+1.5 for chunks that look like commands), see detectIntents
 // "origin scale" = 0.4 + 0.6 * min(1, originFileScore / 15): graph/pair expansion goes one hop from
 // the 5 best-scoring files only, and is damped when the origin itself is a weak hit.
 import { isStopword, normalizeTerm, splitIdentifier, tokenize } from './bm25';
@@ -40,10 +42,67 @@ export const WEIGHTS = {
   importer: 2,
   reference: 3,
   referenceTest: 2,
+  registration: 7,
 } as const;
 
 const DIVERSITY = [1, 0.85, 0.7, 0.55, 0.4];
 const DOC_NOISE = /(^|[/])(changes|changelog|history|news|license)[^/]*$/i;
+
+function kindOf(idx: WorkspaceIndex, c: Candidate): string {
+  const leaf = (c.symbol ?? '').split('.').pop();
+  return idx.file(c.path)?.symbols.find((s) => s.name === leaf && s.startLine <= c.startLine && s.endLine >= c.startLine)?.kind ?? '';
+}
+
+interface Intent {
+  name: string;
+  why: string;
+  weight: number;
+  fileMatch: (f: FileInfo) => boolean;
+  chunkMatch?: (f: FileInfo, c: Chunk) => boolean;
+}
+
+/** Words that name the *new* thing being asked for ("command flask config") are not topics to search for. */
+export function newItemTerms(task: string): Set<string> {
+  const out = new Set<string>();
+  const m = /\b(?:command|function|endpoint|route|option|flag|class|method|decorator|view)\s+((?:[\w-]+\s+)?[\w-]+)/i.exec(task);
+  if (m?.[1]) {
+    for (const w of m[1].split(/\s+/)) if (!isStopword(w.toLowerCase()) && !/^(that|which|to|for|in|on|with)$/i.test(w)) out.add(normalizeTerm(w));
+  }
+  return out;
+}
+
+const CLI_STEMS = new Set(['cli', 'commands', 'command', 'main', '__main__', 'manage', 'console']);
+
+/** Structural phrases in the task -> kinds of files / chunks that should rank higher. */
+export function detectIntents(task: string): Intent[] {
+  const t = task.toLowerCase();
+  const out: Intent[] = [];
+  const cliTask = /\bcli\b|command[- ]line|--help|\bsub-?commands?\b|\bcommands?\b/.test(t);
+  const cliStem = (f: FileInfo): boolean => CLI_STEMS.has(stemOf(f.path).toLowerCase().replace(/^test_?/, ''));
+  if (cliTask) {
+    out.push({
+      name: 'cli command',
+      why: 'CLI module / command definitions',
+      weight: 4,
+      fileMatch: (f) => f.role === 'source' && cliStem(f),
+      chunkMatch: (f, c) =>
+        /command|group|cli/i.test(c.symbol ?? '') || /@\w*\.?(command|group)\b/.test(f.lines.slice(c.startLine - 1, c.startLine + 2).join(' ')),
+    });
+  }
+  if (/\btests?\b|covered by|pytest|unit test/.test(t)) {
+    out.push({ name: 'test', why: 'task asks for tests', weight: 2, fileMatch: (f) => f.role === 'test' && (!cliTask || cliStem(f)) });
+  }
+  if (/documented|\bdocs?\b|documentation|readme/.test(t)) {
+    out.push({ name: 'docs', why: 'task asks for documentation', weight: 2, fileMatch: (f) => f.role === 'doc' && (!cliTask || cliStem(f)) });
+  }
+  if (/\bendpoints?\b|\broutes?\b|\burl\b/.test(t)) {
+    out.push({ name: 'route', why: 'routing code', weight: 2, fileMatch: (f) => f.role === 'source' && /rout|view|url|endpoint|blueprint/.test(f.path.toLowerCase()) });
+  }
+  if (/config(uration)? (option|value|key|setting)|\bsettings?\b/.test(t)) {
+    out.push({ name: 'config option', why: 'configuration handling', weight: 2, fileMatch: (f) => f.role === 'source' && /config|settings/.test(f.path.toLowerCase()) });
+  }
+  return out;
+}
 
 export interface RetrieveOptions {
   maxCandidates?: number;
@@ -102,6 +161,8 @@ export class Retriever {
       return upsert(path, { path, startLine: 1, endLine: Math.max(1, f.lines.length), wholeFile: true }, score, reason, mandatory);
     };
 
+    const nameTerms = newItemTerms(task);
+
     /* 1. mentions */
     for (const m of ctx.mentions) {
       if (m.kind === 'file') {
@@ -158,7 +219,7 @@ export class Retriever {
       let defs = idx.definitions(w, true);
       const identLike =
         /_/.test(w) || /[a-z][A-Z]/.test(w) || task.includes('`' + w) || task.includes(w + '(') || (/^[A-Z][a-z]/.test(w) && defs.some((d) => d.kind === 'class'));
-      let weight = identLike ? WEIGHTS.symbolIdent : WEIGHTS.symbolPlain;
+      let weight: number = identLike ? WEIGHTS.symbolIdent : WEIGHTS.symbolPlain;
       if (!defs.length && w.length >= 5) {
         defs = idx.definitions(w, false);
         weight = WEIGHTS.symbolLoose;
@@ -222,6 +283,7 @@ export class Retriever {
       for (const f of idx.files.values()) {
         const stem = stemOf(f.path).toLowerCase().replace(/^test_?/, '').replace(/_?test$/, '');
         if (f.role === 'config' || f.role === 'other') continue;
+        if (nameTerms.has(normalizeTerm(stem))) continue;
         if (stem.length < 3 || stem === '__init__' || !qs.has(normalizeTerm(stem)) || idx.bm25.idf(normalizeTerm(stem)) < 1.5) continue;
         const top = f.chunks.filter((c) => (bm.get(c.id) ?? 0) > 0).sort((a, b) => (bm.get(b.id) ?? 0) - (bm.get(a.id) ?? 0)).slice(0, 2);
         for (const c of top) addChunk(c, WEIGHTS.fileName * (DOC_NOISE.test(f.path) ? 0.3 : 1), { reason: 'keyword', detail: `file name matches '${stem}'` });
@@ -232,6 +294,39 @@ export class Retriever {
       for (const c of idx.file(path)?.chunks ?? []) m = Math.max(m, bm.get(c.id) ?? 0);
       return m;
     };
+
+    /* 6b. intent weighting: structural phrases in the task favour matching kinds of files */
+    for (const intent of detectIntents(task)) {
+      for (const f of idx.files.values()) {
+        if (!intent.fileMatch(f)) continue;
+        const hot = (c: Chunk): boolean => intent.chunkMatch?.(f, c) ?? false;
+        const top = f.chunks
+          .filter((c) => (bm.get(c.id) ?? 0) > 0 || hot(c))
+          .sort((a, b) => (bm.get(b.id) ?? 0) + (hot(b) ? 50 : 0) - (bm.get(a.id) ?? 0) - (hot(a) ? 50 : 0))
+          .slice(0, 3);
+        for (const c of top) {
+          addChunk(c, intent.weight + (hot(c) ? 1.5 : 0), { reason: 'keyword', detail: `intent '${intent.name}': ${intent.why}` });
+        }
+      }
+    }
+
+    /* 6c. registration / usage sites of the best-ranked definitions */
+    const defCands = [...cands.values()]
+      .filter((c) => c.symbol && !c.wholeFile && idx.file(c.path)?.role === 'source' && /^(function|class|method)$/.test(kindOf(idx, c)))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+    const seenNames = new Set<string>();
+    for (const dc of defCands) {
+      const name = (dc.symbol ?? '').split('.').pop() ?? '';
+      if (name.length < 4 || name.startsWith('__') || seenNames.has(name)) continue;
+      seenNames.add(name);
+      for (const u of this.usageSites(name, dc.path, dc.startLine, dc.endLine).slice(0, 2)) {
+        addChunk(u.chunk, WEIGHTS.registration * (u.registers ? 1.4 : 1), {
+          reason: 'graph',
+          detail: u.registers ? `registers/uses \`${name}\` (${u.line.trim().slice(0, 50)})` : `uses \`${name}\``,
+        });
+      }
+    }
 
     /* 7. one-hop expansion from the best files */
     const fileScore = new Map<string, number>();
@@ -333,6 +428,34 @@ export class Retriever {
     const cap = opts.maxCandidates ?? 80;
     const kept = list.filter((c) => !c.evicted).slice(0, cap).concat(list.filter((c) => c.evicted));
     return { candidates: kept, queryTerms, notes, ms: performance.now() - t0 };
+  }
+
+  /** Non-import lines (outside the definition itself) that mention `name`, mapped to their chunk. */
+  private usageSites(name: string, defPath: string, defStart: number, defEnd: number): { chunk: Chunk; line: string; registers: boolean }[] {
+    const idx = this.index;
+    const refs = idx.referencesTo(name);
+    if (refs.length > 15) return [];
+    const re = new RegExp(`\\b${name.replace(/\$/g, '\\$')}\\b`);
+    const regRe = new RegExp(`\\b(add_\\w+|register\\w*|include\\w*|append|mount|connect|subscribe|setdefault)\\s*\\(|\\[[^\\]]*\\b${name.replace(/\$/g, '\\$')}\\b`);
+    const out: { chunk: Chunk; line: string; registers: boolean; rank: number }[] = [];
+    for (const p of refs) {
+      const f = idx.file(p);
+      if (!f) continue;
+      for (let i = 0; i < f.lines.length; i++) {
+        const l = f.lines[i] ?? '';
+        if (!re.test(l) || /^\s*(from|import|#)/.test(l) || /^\s*(async\s+)?(def|class)\s/.test(l)) continue;
+        if (p === defPath && i + 1 >= defStart && i + 1 <= defEnd) continue;
+        const chunk = idx.chunkAt(p, i + 1);
+        if (!chunk) continue;
+        const registers = regRe.test(l);
+        const prev = out[out.length - 1];
+        if (prev && prev.chunk.path === p && !registers) continue;
+        if (prev && prev.chunk.path === p) out.pop();
+        out.push({ chunk, line: l, registers, rank: (registers ? 10 : 0) + (f.role === 'source' ? 5 : 0) });
+        if (registers) break;
+      }
+    }
+    return out.sort((a, b) => b.rank - a.rank);
   }
 
   private findDefs(value: string): SymbolDef[] {

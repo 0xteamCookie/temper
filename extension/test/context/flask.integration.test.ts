@@ -43,6 +43,12 @@ describe.skipIf(!fs.existsSync(FLASK))('flask integration', () => {
       expect(hits.every((e) => e.reasons.length > 0)).toBe(true);
     }
     expect(res.text).toContain('### src/flask/cli.py');
+    const top5 = res.snapshot.entries.slice(0, 5).map((e) => e.path);
+    expect(top5).toContain('src/flask/cli.py');
+    expect(included.some((e) => e.id === 'src/flask/cli.py#FlaskGroup.__init__' && e.reasons.some((r) => /registers.uses/.test(r.detail)))).toBe(true);
+    const rank = (p: string): number => res.snapshot.entries.findIndex((e) => e.path === p);
+    expect(rank('src/flask/cli.py')).toBeLessThan(rank('src/flask/config.py'));
+    expect(rank('docs/cli.rst')).toBeLessThan(rank('docs/config.rst'));
     expect(res.text).toContain('## Repo map');
   });
 
