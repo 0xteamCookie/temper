@@ -4,15 +4,16 @@ import type { FileChange, Hunk, LedgerEntry, LedgerSnapshot, ModelInfo, RunEvent
 import type { EditorSelection } from '../../src/shared/messages';
 import type { HostMessage, Mention, WebviewMessage } from './vscode';
 import { setMockHandler } from './vscode';
+import { bindProviders, providersHandle } from './demoProviders';
 
 const send = (m: HostMessage) => window.postMessage(m, '*');
 const ev = (event: RunEvent) => send({ type: 'run.event', event });
 
 const MODELS: ModelInfo[] = [
-  { name: 'anthropic/claude-sonnet', provider: 'anthropic', health: 'failing', lastError: '[Model Error] Request failed (429)' },
-  { name: 'openai/gpt-5', provider: 'openai', health: 'ok' },
-  { name: 'google/gemini-pro', provider: 'google', health: 'unknown' },
-  { name: 'local/qwen-coder', provider: 'local', health: 'ok' },
+  { name: 'anthropic/claude-sonnet', provider: 'anthropic', health: 'failing', lastError: '[Model Error] Request failed (429)', contextLength: 200000 },
+  { name: 'openai/gpt-5', provider: 'openai', health: 'ok', contextLength: 128000 },
+  { name: 'google/gemini-pro', provider: 'google', health: 'unknown', contextLength: 1048576 },
+  { name: 'local/qwen-coder', provider: 'local', health: 'ok', contextLength: 32768 },
 ];
 let chain = ['anthropic/claude-sonnet', 'openai/gpt-5', 'google/gemini-pro'];
 let agentModel = 'anthropic/claude-sonnet';
@@ -155,6 +156,7 @@ export function stop(): void {
 
 function handle(m: WebviewMessage): void {
   console.debug('[temper dev] webview ->', m);
+  if (providersHandle(m)) return;
   switch (m.type) {
     case 'ready':
       send({ type: 'connection', trueforge: 'connected', detail: 'localhost:8000' });
@@ -214,7 +216,15 @@ function handle(m: WebviewMessage): void {
   }
 }
 
+/** Dev bar: preview the Models view with TrueForge down, or reachable with no models. */
+export function setServer(mode: 'up' | 'down' | 'empty'): void {
+  const none = mode === 'empty';
+  send({ type: 'connection', trueforge: mode === 'down' ? 'disconnected' : 'connected', detail: mode === 'down' ? 'connect ECONNREFUSED 127.0.0.1:8790' : undefined });
+  send({ type: 'models.update', models: none ? [] : MODELS, chain: none ? [] : chain, agentModel: none ? '' : agentModel, inlineModel: none ? '' : inlineModel });
+}
+
 export function startDemo(): void {
+  bindProviders(send);
   document.documentElement.dataset.devTheme = 'dark';
   document.body.className = 'vscode-dark';
   setMockHandler(handle);

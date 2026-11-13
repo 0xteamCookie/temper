@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import type { ModelInfo } from '../../../src/shared/types';
 import { postToHost } from '../vscode';
-import { HealthPill, Icon, IconButton, ModelPicker, shortModel } from './ui';
+import type { ProviderPanelState } from '../../../src/shared/providers';
+import { Providers, ServerDown } from './Providers';
+import { fmtTokens, HealthPill, Icon, IconButton, ModelPicker, shortModel } from './ui';
 
 export function Models({
   models,
   chain,
   agentModel,
   inlineModel,
+  connected,
+  detail,
+  providers,
   onChain,
   onPick,
 }: {
@@ -15,6 +20,9 @@ export function Models({
   chain: string[];
   agentModel: string;
   inlineModel: string;
+  connected: boolean;
+  detail?: string;
+  providers: ProviderPanelState;
   onChain: (c: string[]) => void;
   onPick: (mode: 'agent' | 'inline', name: string) => void;
 }) {
@@ -29,6 +37,12 @@ export function Models({
     const next = chain.slice();
     const [x] = next.splice(from, 1);
     next.splice(to, 0, x!);
+    onChain(next);
+    postToHost({ type: 'models.reorder', chain: next });
+  };
+
+  const addToChain = (name: string) => {
+    const next = [...chain, name];
     onChain(next);
     postToHost({ type: 'models.reorder', chain: next });
   };
@@ -68,10 +82,18 @@ export function Models({
         </span>
         <span className="ellipsis muted small">
           {m.provider}
+          {m.contextLength ? ` · ${fmtTokens(m.contextLength)} context` : ''}
+          {m.name === agentModel ? ' · Agent' : ''}
+          {m.name === inlineModel ? ' · Inline' : ''}
           {m.health === 'failing' && m.lastError ? ` · ${m.lastError}` : ''}
         </span>
       </span>
       <HealthPill health={m.health} lastError={m.lastError} />
+      {idx === null && (
+        <span className="row-actions">
+          <IconButton icon="add" label={`Add ${m.name} to the fallback chain`} onClick={() => addToChain(m.name)} />
+        </span>
+      )}
       {idx !== null && (
         <span className="row-actions">
           <IconButton icon="arrow-up" label={`Move ${m.name} up`} disabled={idx === 0} onClick={() => move(idx, idx - 1)} />
@@ -81,8 +103,17 @@ export function Models({
     </li>
   );
 
+  if (!connected) {
+    return (
+      <div className="models">
+        <ServerDown detail={detail} state={providers} />
+      </div>
+    );
+  }
+
   return (
     <div className="models">
+      <Providers state={providers} hasModels={models.length > 0} />
       <div className="field">
         <span className="field-label">Agent model</span>
         <ModelPicker variant="field" label="Agent model" models={models} value={agentModel} onPick={pick('agent')} />

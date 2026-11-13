@@ -17,6 +17,7 @@ import { ChangesetWorkspace } from './changesetWorkspace';
 import { createEditTools } from './editTools';
 import { EditorReview } from './editorReview';
 import { mentionSuggestions } from './mentions';
+import { ProviderSetup } from './providerSetup';
 import { buildInlinePrompt, composeAgentPrompt } from './prompts';
 import { RunController } from './runController';
 import type { ReviewPresentation, RunUi } from './runController';
@@ -96,6 +97,13 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     this.client = new ClientProxy(new TrueForgeClient({ baseUrl: this.baseUrl, log: (l) => this.log(l) }));
     this.connection = new TrueForgeConnection(this.client);
     this.connection.onLog = (l) => this.log(l);
+    this.providers = new ProviderSetup({
+      extensionUri: context.extensionUri,
+      getBaseUrl: () => this.baseUrl,
+      post: (m) => this.send(m),
+      log: (l) => this.log(l),
+      refreshConnection: () => this.connection.check(),
+    });
     this.connection.setAgentProvider(() => this.agentDefs());
     this.editorReview = new EditorReview(this.root ? vscode.Uri.file(this.root) : undefined);
 
@@ -137,6 +145,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       }),
       this.connection.onChange(() => {
         this.postConnection();
+        void this.providers.refresh();
         this.postModels();
         this.renderStatus();
       }),
@@ -156,6 +165,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   }
 
   private readonly workspace: ChangesetWorkspace;
+  private readonly providers: ProviderSetup;
 
   /* ------------------------------------------------------------------ */
   /* Startup                                                             */
@@ -397,6 +407,31 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.postModels();
         this.controller.postCheckpoints();
         void this.connection.check();
+        void this.providers.refresh();
+        break;
+      case 'providers.refresh':
+        void this.providers.refresh();
+        break;
+      case 'providers.add':
+        void this.providers.add(msg.id);
+        break;
+      case 'providers.edit':
+        void this.providers.edit(msg.name);
+        break;
+      case 'providers.check':
+        void this.providers.check(msg.name);
+        break;
+      case 'providers.remove':
+        void this.providers.remove(msg.name);
+        break;
+      case 'server.start':
+        void this.providers.startServer();
+        break;
+      case 'server.copyCommand':
+        void this.providers.copyCommand();
+        break;
+      case 'connection.retry':
+        void this.connection.check().then(() => this.providers.refresh());
         break;
       case 'chat.send':
         if (msg.mode === 'edit') void this.runEditFromChat(msg.text, msg.selection);

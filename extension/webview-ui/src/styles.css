@@ -661,3 +661,18 @@ kbd {
 
 .devbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 12px; border-top: 1px dashed var(--t-border); font-size: 11px; }
 .devbar select { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, var(--t-border)); }
+
+/* ------------------------------ providers ------------------------------ */
+
+.providers { display: flex; flex-direction: column; gap: 8px; }
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--t-surface);
+  border: 1px solid var(--t-border);
+  border-radius: 4px;
+}
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.provider-row .btn { flex: none; }

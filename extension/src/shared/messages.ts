@@ -6,6 +6,7 @@ import type {
   ModelInfo,
   RunEvent,
 } from './types';
+import type { ProviderPanelState } from './providers';
 
 export interface Mention {
   kind: 'file' | 'symbol';
@@ -30,6 +31,7 @@ export type HostMessage =
   | { type: 'review.closed'; runId: string; applied: number; rejected: number }
   | { type: 'checkpoints.update'; canUndo: boolean; lastLabel?: string }
   | { type: 'mention.suggestions'; query: string; items: Mention[] }
+  | { type: 'providers.state'; state: ProviderPanelState }
   | { type: 'connection'; trueforge: 'connected' | 'disconnected'; detail?: string }
   /** Current editor selection (null when there is no non-empty selection in a workspace file). Debounced. */
   | { type: 'editor.selection'; selection: EditorSelection | null }
@@ -54,5 +56,10 @@ export type WebviewMessage =
   | { type: 'undo.last' }
   | { type: 'mention.query'; query: string }
   | { type: 'openSession' }
+  /** Providers screen (keys are entered in host-side input boxes, never in the webview). */
+  | { type: 'providers.refresh' }
+  | { type: 'providers.add'; id: string }
+  | { type: 'providers.edit' | 'providers.check' | 'providers.remove'; name: string }
+  | { type: 'server.start' | 'server.copyCommand' | 'connection.retry' }
   /** Open a workspace file in the editor, optionally revealing a 1-based line. */
   | { type: 'open.file'; path: string; line?: number };
