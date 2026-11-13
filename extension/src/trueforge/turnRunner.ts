@@ -5,9 +5,28 @@ import type { RawEvent, TrueForgeClientLike } from './client';
 type Emit = (ev: RunEvent) => void;
 
 /** Read a field that may arrive camelCase (SDK) or snake_case (raw wire). */
-function g(o: any, camel: string, snake: string): any {
-  return o?.[camel] ?? o?.[snake];
+function g(o: unknown, camel: string, snake: string): unknown {
+  const r = rec(o);
+  return r[camel] ?? r[snake];
 }
+
+/** Untyped wire object (parsed JSON). */
+type Rec = Record<string, unknown>;
+
+function rec(v: unknown): Rec {
+  return v && typeof v === 'object' ? (v as Rec) : {};
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined;
+}
+
+function num(v: unknown): number | undefined {
+  return typeof v === 'number' ? v : undefined;
+}
+
+type DeltaArg = Parameters<typeof mergeEventDelta>[1];
+type MergeTarget = Parameters<typeof mergeEventDelta>[0];
 
 function parseArgs(raw: unknown): unknown {
   if (typeof raw !== 'string') return raw ?? {};
@@ -23,7 +42,7 @@ function parseArgs(raw: unknown): unknown {
 function unwrapCall(name: string, rawArgs: unknown): { name: string; args: unknown } {
   const args = parseArgs(rawArgs);
   if (name === 'call_tool' && args && typeof args === 'object') {
-    const a = args as Record<string, any>;
+    const a = args as Rec;
     const inner = a.tool_name ?? a.toolName ?? a.name;
     if (typeof inner === 'string') {
       const input = a.input ?? a.arguments ?? a.args ?? {};
@@ -39,32 +58,39 @@ function unwrapCall(name: string, rawArgs: unknown): { name: string; args: unkno
  */
 export function unwrapToolContent(content: unknown): { content: string; isError: boolean } {
   if (typeof content !== 'string') return { content: JSON.stringify(content ?? ''), isError: false };
-  let parsed: any;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch {
     return { content, isError: false };
   }
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'error' in parsed) {
-    let err: any = parsed.error;
-    if (Array.isArray(err)) err = err.map((p) => (typeof p?.text === 'string' ? p.text : JSON.stringify(p))).join('\n');
+    let err: unknown = (parsed as Rec).error;
+    if (Array.isArray(err)) err = err.map((p: unknown) => (typeof rec(p).text === 'string' ? (rec(p).text as string) : JSON.stringify(p))).join('\n');
     if (typeof err === 'string') {
+      let msg: string = err;
       try {
-        const inner = JSON.parse(err);
-        if (inner && typeof inner === 'object' && typeof inner.error === 'string') err = inner.error;
+        const inner: unknown = JSON.parse(err);
+        const ie = rec(inner).error;
+        if (typeof ie === 'string') msg = ie;
       } catch {
         /* plain text */
       }
-      return { content: err, isError: true };
+      return { content: msg, isError: true };
     }
     return { content: JSON.stringify(err), isError: true };
   }
   return { content, isError: false };
 }
 
+interface ToolCallRaw {
+  id?: string;
+  function?: { name?: string; arguments?: unknown };
+}
+
 interface MsgState {
-  msg: any; // merged model.message (mutated in place by mergeEventDelta)
-  shell: any; // pristine copy of the original model.message event
+  msg: Rec; // merged model.message (mutated in place by mergeEventDelta)
+  shell: Rec; // pristine copy of the original model.message event
   threadId: string;
   emittedText: number;
   emittedCalls: Set<string>;
@@ -94,7 +120,7 @@ export class TurnRunner {
 
   feed(ev: RawEvent): void {
     if (this.finished) return;
-    if (isEventDelta(ev as any)) {
+    if (isEventDelta(ev as unknown as DeltaArg)) {
       this.onDelta(ev);
       return;
     }
@@ -106,20 +132,20 @@ export class TurnRunner {
     this.lastWasShellOf = undefined;
     switch (ev.type) {
       case 'turn.created':
-        this.turnId = g(ev, 'turnId', 'turn_id') ?? this.turnId;
-        this.createdAt = g(ev, 'createdAt', 'created_at');
+        this.turnId = str(g(ev, 'turnId', 'turn_id')) ?? this.turnId;
+        this.createdAt = str(g(ev, 'createdAt', 'created_at'));
         this.emit({ kind: 'status', runId: this.runId, status: 'running' });
         break;
       case 'turn.update': {
-        const st = ev.state?.status;
+        const st = rec(ev.state).status;
         if (st === 'paused' || st === 'running') this.emit({ kind: 'status', runId: this.runId, status: st });
         break;
       }
       case 'model.message': {
         this.flushAll();
-        const threadId = g(ev, 'threadId', 'thread_id') ?? 'main';
-        const msg = structuredClone(ev);
-        this.msgs.set(ev.id as string, { msg, shell: structuredClone(ev), threadId, emittedText: 0, emittedCalls: new Set() });
+        const threadId = str(g(ev, 'threadId', 'thread_id')) ?? 'main';
+        const msg = structuredClone(ev) as Rec;
+        this.msgs.set(ev.id as string, { msg, shell: structuredClone(ev) as Rec, threadId, emittedText: 0, emittedCalls: new Set() });
         this.lastWasShellOf = ev.id;
         this.emitTextFor(this.msgs.get(ev.id as string)!);
         break;
@@ -130,8 +156,8 @@ export class TurnRunner {
         this.emit({
           kind: 'toolResult',
           runId: this.runId,
-          threadId: g(ev, 'threadId', 'thread_id') ?? 'main',
-          id: g(ev, 'toolCallId', 'tool_call_id'),
+          threadId: str(g(ev, 'threadId', 'thread_id')) ?? 'main',
+          id: str(g(ev, 'toolCallId', 'tool_call_id')) as string,
           content,
           isError,
         });
@@ -142,7 +168,7 @@ export class TurnRunner {
         this.onApproval(ev);
         break;
       case 'thread.created': {
-        const threadId = g(ev, 'threadId', 'thread_id');
+        const threadId = str(g(ev, 'threadId', 'thread_id'));
         if (!threadId) break;
         const title = String(ev.title ?? ev.name ?? ev.description ?? ev.agentName ?? ev.agent_name ?? threadId);
         this.threadTitles.set(threadId, title);
@@ -150,7 +176,7 @@ export class TurnRunner {
         break;
       }
       case 'thread.done': {
-        const threadId = g(ev, 'threadId', 'thread_id');
+        const threadId = str(g(ev, 'threadId', 'thread_id'));
         if (!threadId) break;
         this.emit({
           kind: 'subagent',
@@ -158,7 +184,7 @@ export class TurnRunner {
           threadId,
           title: this.threadTitles.get(threadId) ?? threadId,
           phase: 'done',
-          status: ev.state?.status ?? ev.status,
+          status: str(rec(ev.state).status ?? ev.status),
         });
         break;
       }
@@ -167,7 +193,7 @@ export class TurnRunner {
         this.emit({
           kind: 'compaction',
           runId: this.runId,
-          threadId: g(ev, 'threadId', 'thread_id') ?? 'main',
+          threadId: str(g(ev, 'threadId', 'thread_id')) ?? 'main',
           phase: ev.type.endsWith('started') ? 'start' : 'done',
         });
         break;
@@ -210,11 +236,11 @@ export class TurnRunner {
     const id = ev.id as string;
     let st = this.msgs.get(id);
     if (!st) {
-      const shell = { type: 'model.message', id, threadId: 'main' };
+      const shell: Rec = { type: 'model.message', id, threadId: 'main' };
       st = { msg: structuredClone(shell), shell, threadId: 'main', emittedText: 0, emittedCalls: new Set() };
       this.msgs.set(id, st);
     }
-    mergeEventDelta(st.msg, ev as any);
+    mergeEventDelta(st.msg as unknown as MergeTarget, ev as unknown as DeltaArg);
     this.emitTextFor(st);
     if (g(ev, 'finishReason', 'finish_reason')) this.flushCalls(st);
   }
@@ -227,8 +253,9 @@ export class TurnRunner {
     this.emit({ kind: 'text', runId: this.runId, threadId: st.threadId, delta });
   }
 
-  private callsOf(st: MsgState): any[] {
-    return g(st.msg, 'toolCalls', 'tool_calls') ?? [];
+  private callsOf(st: MsgState): ToolCallRaw[] {
+    const calls = g(st.msg, 'toolCalls', 'tool_calls');
+    return Array.isArray(calls) ? (calls as ToolCallRaw[]) : [];
   }
 
   private flushCalls(st: MsgState): void {
@@ -245,7 +272,7 @@ export class TurnRunner {
     for (const st of this.msgs.values()) this.flushCalls(st);
   }
 
-  private findCall(sourceEventId: string | undefined, callId: string): { st: MsgState; tc: any } | undefined {
+  private findCall(sourceEventId: string | undefined, callId: string): { st: MsgState; tc: ToolCallRaw } | undefined {
     const src = sourceEventId ? this.msgs.get(sourceEventId) : undefined;
     const pools = src ? [src, ...this.msgs.values()] : [...this.msgs.values()];
     for (const st of pools) {
@@ -256,12 +283,13 @@ export class TurnRunner {
   }
 
   private onApproval(ev: RawEvent): void {
-    const threadId = g(ev, 'threadId', 'thread_id') ?? 'main';
-    for (const ref of g(ev, 'toolCalls', 'tool_calls') ?? []) {
-      const id: string = ref.id;
+    const threadId = str(g(ev, 'threadId', 'thread_id')) ?? 'main';
+    const refs = g(ev, 'toolCalls', 'tool_calls');
+    for (const ref of Array.isArray(refs) ? (refs as Rec[]) : []) {
+      const id = str(ref.id);
       if (!id || this.approvalsSeen.has(id)) continue; // duplicate approval events (#508)
       this.approvalsSeen.add(id);
-      const found = this.findCall(g(ref, 'sourceEventId', 'source_event_id'), id);
+      const found = this.findCall(str(g(ref, 'sourceEventId', 'source_event_id')), id);
       const { name, args } = found
         ? unwrapCall(found.tc.function?.name ?? '', found.tc.function?.arguments)
         : { name: 'unknown', args: {} };
@@ -270,13 +298,13 @@ export class TurnRunner {
   }
 
   private onDone(ev: RawEvent): void {
-    const state = ev.state ?? {};
-    const status: string = state.status;
-    const m = state.metrics ?? {};
-    const completedAt = g(state, 'completedAt', 'completed_at');
+    const state = rec(ev.state);
+    const status = str(state.status);
+    const m = rec(state.metrics);
+    const completedAt = str(g(state, 'completedAt', 'completed_at'));
     const metrics: RunMetrics = {
-      inputTokens: g(m, 'totalInputTokens', 'total_input_tokens'),
-      outputTokens: g(m, 'totalOutputTokens', 'total_output_tokens'),
+      inputTokens: num(g(m, 'totalInputTokens', 'total_input_tokens')),
+      outputTokens: num(g(m, 'totalOutputTokens', 'total_output_tokens')),
       toolCalls: this.toolCallCount,
     };
     if (this.createdAt && completedAt) {
@@ -285,8 +313,8 @@ export class TurnRunner {
     }
     let done: Extract<RunEvent, { kind: 'done' }>;
     if (status === 'done') done = { kind: 'done', runId: this.runId, status: 'done', metrics };
-    else if (status === 'cancelled') done = { kind: 'done', runId: this.runId, status: 'cancelled', message: state.reason, metrics };
-    else done = { kind: 'done', runId: this.runId, status: 'error', message: state.message ?? `Turn ended with status '${status}'`, metrics };
+    else if (status === 'cancelled') done = { kind: 'done', runId: this.runId, status: 'cancelled', message: str(state.reason), metrics };
+    else done = { kind: 'done', runId: this.runId, status: 'error', message: str(state.message) ?? `Turn ended with status '${status}'`, metrics };
     this.finished = true;
     this.doneEvent = done;
     this.emit(done);

@@ -315,7 +315,7 @@ export class ChangesetStore {
             /* best effort */
           }
         }
-        throw new Error(`Failed to apply changes; rolled back. ${(err as Error).message}`)
+        throw new Error(`Failed to apply changes; rolled back. ${(err as Error).message}`, { cause: err })
       }
 
       const cp: Checkpoint = {

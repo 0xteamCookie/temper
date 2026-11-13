@@ -9,6 +9,7 @@
 // strategy instead of throwing, CRLF preservation, empty-oldString create, closest-lines miss hint.
 // See notes/attributions-pending.md.
 
+/* eslint-disable @typescript-eslint/ban-ts-comment -- vendored upstream code kept close to source for auditability */
 // The upstream code predates noUncheckedIndexedAccess; type-checking is disabled for this ported file only.
 // @ts-nocheck
 export type Replacer = (content: string, find: string) => Generator<string, void, unknown>
@@ -124,7 +125,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     const actualBlockSize = endLine - startLine + 1
 
     let similarity = 0
-    let linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
+    const linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
 
     if (linesToCheck > 0) {
       for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
@@ -173,7 +174,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     const actualBlockSize = endLine - startLine + 1
 
     let similarity = 0
-    let linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
+    const linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
 
     if (linesToCheck > 0) {
       for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
@@ -240,7 +241,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
             if (match) {
               yield match[0]
             }
-          } catch (e) {
+          } catch {
             // Invalid regex pattern, skip
           }
         }

@@ -8,10 +8,19 @@ import {
 } from './errors';
 
 /** A raw TrueForge stream event as delivered by the SDK (camelCase keys). */
-export type RawEvent = { type: string; id?: string; [key: string]: any };
+export type RawEvent = { type: string; id?: string; [key: string]: unknown };
 
 /** Agent spec passed to TrueForge (inline spec; see agent/*.json). */
-export type AgentSpec = Record<string, any> & { model: { name: string } };
+export type AgentSpec = Record<string, unknown> & { model: { name: string } };
+
+/** Loosely typed JSON as parsed off the wire / thrown by the SDK. */
+type Rec = Record<string, unknown>;
+
+function rec(v: unknown): Rec {
+  return v && typeof v === 'object' ? (v as Rec) : {};
+}
+
+type SessionsApi = TrueForge['sessions'];
 
 export interface StreamOptions {
   signal?: AbortSignal;
@@ -45,9 +54,9 @@ function errText(e: unknown): string {
 /** Pull the server's error message out of an `{error:{message}}` body, if present. */
 function bodyMessage(body: unknown): string | undefined {
   if (body && typeof body === 'object') {
-    const err = (body as any).error;
-    if (err && typeof err.message === 'string') return err.message;
-    if (typeof (body as any).message === 'string') return (body as any).message;
+    const err = rec((body as Rec).error);
+    if (typeof err.message === 'string') return err.message;
+    if (typeof (body as Rec).message === 'string') return (body as Rec).message as string;
   }
   return undefined;
 }
@@ -55,12 +64,13 @@ function bodyMessage(body: unknown): string | undefined {
 /** Convert an SDK / fetch failure into a typed TrueForge error. */
 function toTypedError(e: unknown, what: string): Error {
   if (e instanceof TrueForgeError) return e;
-  const status: number | undefined = (e as any)?.statusCode ?? (e as any)?.status;
+  const er = rec(e);
+  const status = er.statusCode ?? er.status;
   if (typeof status === 'number') {
-    const body = (e as any)?.body;
+    const body = er.body;
     return new TrueForgeHttpError(`${what} failed (${status}): ${bodyMessage(body) ?? errText(e)}`, status, body);
   }
-  if ((e as any)?.name === 'AbortError') return e as Error;
+  if (er.name === 'AbortError') return e as Error;
   return new TrueForgeUnreachableError(`Cannot reach TrueForge (${what}): ${errText(e)}`, e);
 }
 
@@ -76,7 +86,7 @@ export class TrueForgeClient implements TrueForgeClientLike {
 
   /* ---------------- plain HTTP (wire is snake_case JSON) ---------------- */
 
-  private async http<T = any>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T }> {
+  private async http(method: string, path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
@@ -89,7 +99,7 @@ export class TrueForgeClient implements TrueForgeClientLike {
       throw new TrueForgeUnreachableError(`Cannot reach TrueForge at ${this.baseUrl}: ${errText(e)}`, e);
     }
     const text = await res.text();
-    let data: any = undefined;
+    let data: unknown = undefined;
     if (text) {
       try {
         data = JSON.parse(text);
@@ -116,11 +126,12 @@ export class TrueForgeClient implements TrueForgeClientLike {
   async listModels(): Promise<ModelInfo[]> {
     const { status, data } = await this.http('GET', '/api/v1/models');
     if (status !== 200) this.failHttp('List models', status, data);
-    const rows: any[] = Array.isArray(data?.data) ? data.data : [];
+    const list = rec(data).data;
+    const rows: Rec[] = Array.isArray(list) ? (list as Rec[]) : [];
     return rows.map((m) => ({
       name: String(m.name),
-      provider: String(m.provider?.name ?? String(m.name).split('/')[0] ?? ''),
-      contextLength: typeof m.properties?.context_length === 'number' ? m.properties.context_length : undefined,
+      provider: String(rec(m.provider).name ?? String(m.name).split('/')[0] ?? ''),
+      contextLength: typeof rec(m.properties).context_length === 'number' ? (rec(m.properties).context_length as number) : undefined,
       health: 'unknown' as const,
     }));
   }
@@ -146,15 +157,15 @@ export class TrueForgeClient implements TrueForgeClientLike {
 
   async createSession(spec: AgentSpec): Promise<{ id: string }> {
     try {
-      const res: any = await this.sdk.sessions.create({ agent: { spec } } as any);
-      const id = res?.data?.id ?? res?.id;
+      const res: unknown = await this.sdk.sessions.create({ agent: { spec } } as unknown as Parameters<SessionsApi['create']>[0]);
+      const id = rec(rec(res).data).id ?? rec(res).id;
       if (!id) throw new TrueForgeError('TrueForge returned no session id');
-      return { id };
+      return { id: id as string };
     } catch (e) {
-      const status = (e as any)?.statusCode;
+      const status = rec(e).statusCode;
       if (status === 422) {
-        const msg = bodyMessage((e as any)?.body) ?? errText(e);
-        throw new ModelUnavailableError(msg, { model: spec?.model?.name, body: (e as any)?.body });
+        const msg = bodyMessage(rec(e).body) ?? errText(e);
+        throw new ModelUnavailableError(msg, { model: spec?.model?.name, body: rec(e).body });
       }
       throw toTypedError(e, 'Create session');
     }
@@ -163,9 +174,11 @@ export class TrueForgeClient implements TrueForgeClientLike {
   async *streamTurn(sessionId: string, text: string, opts: StreamOptions = {}): AsyncIterable<RawEvent> {
     let stream: AsyncIterable<RawEvent>;
     try {
-      const req: any = { input: [{ type: 'user.message', content: text }], stream: true };
+      const req: Rec = { input: [{ type: 'user.message', content: text }], stream: true };
       if (opts.previousTurnId) req.previousTurnId = opts.previousTurnId;
-      stream = (await this.sdk.sessions.createTurnStream(sessionId, req, { abortSignal: opts.signal })) as any;
+      stream = (await this.sdk.sessions.createTurnStream(sessionId, req as unknown as Parameters<SessionsApi['createTurnStream']>[1], {
+        abortSignal: opts.signal,
+      })) as unknown as AsyncIterable<RawEvent>;
     } catch (e) {
       if (opts.signal?.aborted) return;
       throw toTypedError(e, 'Start turn');
@@ -176,8 +189,10 @@ export class TrueForgeClient implements TrueForgeClientLike {
   async *subscribe(sessionId: string, turnId: string, afterEventId?: string, signal?: AbortSignal): AsyncIterable<RawEvent> {
     let stream: AsyncIterable<RawEvent>;
     try {
-      const req: any = afterEventId ? { afterEventId } : {};
-      stream = (await this.sdk.sessions.subscribeToTurn(sessionId, turnId, req, { abortSignal: signal })) as any;
+      const req: Rec = afterEventId ? { afterEventId } : {};
+      stream = (await this.sdk.sessions.subscribeToTurn(sessionId, turnId, req as unknown as Parameters<SessionsApi['subscribeToTurn']>[2], {
+        abortSignal: signal,
+      })) as unknown as AsyncIterable<RawEvent>;
     } catch (e) {
       if (signal?.aborted) return;
       throw toTypedError(e, 'Subscribe to turn');
@@ -199,7 +214,7 @@ export class TrueForgeClient implements TrueForgeClientLike {
     try {
       await this.sdk.sessions.createTurnEvents(sessionId, turnId, {
         events: [{ type: 'user.tool_approval', threadId, toolCallId, approval: decision }],
-      } as any);
+      } as unknown as Parameters<SessionsApi['createTurnEvents']>[2]);
     } catch (e) {
       throw toTypedError(e, 'Send approval');
     }
@@ -207,7 +222,7 @@ export class TrueForgeClient implements TrueForgeClientLike {
 
   async cancel(sessionId: string): Promise<void> {
     try {
-      await this.sdk.sessions.cancel(sessionId, {} as any);
+      await this.sdk.sessions.cancel(sessionId, {} as Parameters<SessionsApi['cancel']>[1]);
     } catch (e) {
       throw toTypedError(e, 'Cancel');
     }

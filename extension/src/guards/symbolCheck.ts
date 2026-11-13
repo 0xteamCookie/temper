@@ -87,11 +87,17 @@ export function stripStringsAndComments(src: string, language: SymbolLanguage): 
     const c = src[i]!
     const c2 = src.slice(i, i + 3)
     if (language === 'python' && c === '#') {
-      while (i < n && src[i] !== '\n') (out.push(' '), i++)
+      while (i < n && src[i] !== '\n') {
+        out.push(' ')
+        i++
+      }
       continue
     }
     if (language !== 'python' && c === '/' && src[i + 1] === '/') {
-      while (i < n && src[i] !== '\n') (out.push(' '), i++)
+      while (i < n && src[i] !== '\n') {
+        out.push(' ')
+        i++
+      }
       continue
     }
     if (language !== 'python' && c === '/' && src[i + 1] === '*') {
@@ -203,15 +209,15 @@ export function definedNames(code: string, language: SymbolLanguage): Set<string
   for (const m of code.matchAll(/\blambda\b([^:]*):/g)) for (const part of splitTopLevel(m[1]!)) add(identsIn(part.split('=')[0]!)[0])
 
   // Loop targets and with/except aliases.
-  for (const m of code.matchAll(/\bfor\s+\(?\s*(?:(?:const|let|var)\s+)?([\w\s,()*\[\]]+?)\s+(?:in|of)\b/g)) addAll(m[1]!)
+  for (const m of code.matchAll(/\bfor\s+\(?\s*(?:(?:const|let|var)\s+)?([\w\s,()*[\]]+?)\s+(?:in|of)\b/g)) addAll(m[1]!)
   for (const m of code.matchAll(/\bas\s+([A-Za-z_]\w*)/g)) add(m[1])
   for (const m of code.matchAll(/\b(?:global|nonlocal)\s+([\w\s,]+)/g)) addAll(m[1]!)
   for (const m of code.matchAll(/\bcatch\s*\(\s*([A-Za-z_]\w*)/g)) add(m[1])
 
   // Assignments (incl. augmented, annotated, walrus, keyword args — harmless over-approximation).
-  for (const m of code.matchAll(/(?<![.\w])([A-Za-z_]\w*)\s*(?::[^=\n]+)?(?::=|[-+*\/%@&|^]=|\/\/=|\*\*=|>>=|<<=|=(?!=))/g)) add(m[1])
+  for (const m of code.matchAll(/(?<![.\w])([A-Za-z_]\w*)\s*(?::[^=\n]+)?(?::=|[-+*/%@&|^]=|\/\/=|\*\*=|>>=|<<=|=(?!=))/g)) add(m[1])
   // Tuple unpacking at statement start: a, b = ...
-  for (const m of code.matchAll(/^[ \t]*\(?([A-Za-z_*][\w\s,*()\[\]]*?)\)?\s*=(?!=)/gm)) addAll(m[1]!)
+  for (const m of code.matchAll(/^[ \t]*\(?([A-Za-z_*][\w\s,*()[\]]*?)\)?\s*=(?!=)/gm)) addAll(m[1]!)
 
   // Imports.
   for (const m of code.matchAll(/^[ \t]*import\s+([^\n]+)/gm)) {

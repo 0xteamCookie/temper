@@ -89,3 +89,6 @@ export class FakeClient implements TrueForgeClientLike {
     this.cancelResolvers.get(sessionId)?.();
   }
 }
+
+/** View a typed event as a loose record, for asserting on fields of a narrowed-by-kind event. */
+export const loose = (e: unknown): Record<string, unknown> => e as Record<string, unknown>;

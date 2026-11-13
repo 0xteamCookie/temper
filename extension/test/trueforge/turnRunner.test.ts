@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { RunEvent } from '../../src/shared/types';
 import { consumeTurn, TurnRunner, unwrapToolContent } from '../../src/trueforge';
-import { FakeClient, collect, fixture, okTurn } from './helpers';
+import type { RawEvent } from '../../src/trueforge';
+import { FakeClient, collect, fixture, loose, okTurn } from './helpers';
 
 function replay(name: string): { events: RunEvent[]; runner: TurnRunner } {
   const { events, push } = collect();
@@ -24,8 +25,8 @@ describe('TurnRunner: replayed spike streams', () => {
     expect(events.find((e) => e.kind === 'approval')).toMatchObject({
       toolCallId: 'call_edit1', name: 'propose_edit', threadId: 'main', args: { path: 'src/app.py' },
     });
-    expect(events.filter((e) => e.kind === 'status').map((e: any) => e.status)).toEqual(['running', 'paused', 'running']);
-    const results = events.filter((e) => e.kind === 'toolResult') as any[];
+    expect(events.filter((e) => e.kind === 'status').map((e) => e.status)).toEqual(['running', 'paused', 'running']);
+    const results = events.filter((e) => e.kind === 'toolResult') as Array<Record<string, unknown>>;
     expect(results[0]).toMatchObject({ id: 'call_read1', content: "# src/app.py\nprint('hello')\n", isError: false });
     expect(results[1]).toMatchObject({ id: 'call_edit1', content: 'edit to src/app.py recorded', isError: false });
     expect(events.find((e) => e.kind === 'text')).toMatchObject({ delta: 'Done. Last tool result: edit to src/app.py recorded' });
@@ -35,7 +36,7 @@ describe('TurnRunner: replayed spike streams', () => {
 
   it('approval is emitted after its toolCall', () => {
     const { events } = replay('tool-allow');
-    const iCall = events.findIndex((e) => e.kind === 'toolCall' && (e as any).id === 'call_edit1');
+    const iCall = events.findIndex((e) => e.kind === 'toolCall' && loose(e).id === 'call_edit1');
     const iAppr = events.findIndex((e) => e.kind === 'approval');
     expect(iCall).toBeGreaterThanOrEqual(0);
     expect(iAppr).toBeGreaterThan(iCall);
@@ -43,14 +44,14 @@ describe('TurnRunner: replayed spike streams', () => {
 
   it('tool turn with deny reports the denial as an error result', () => {
     const { events } = replay('tool-deny');
-    const results = events.filter((e) => e.kind === 'toolResult') as any[];
+    const results = events.filter((e) => e.kind === 'toolResult') as Array<Record<string, unknown>>;
     expect(results[1]).toMatchObject({ id: 'call_edit1', content: 'User denied tool call: not today', isError: true });
     expect(events.at(-1)).toMatchObject({ kind: 'done', status: 'done' });
   });
 
   it('cancel while paused', () => {
     const { events } = replay('cancel-paused');
-    expect(events.filter((e) => e.kind === 'status').map((e: any) => e.status)).toEqual(['running', 'paused']);
+    expect(events.filter((e) => e.kind === 'status').map((e) => e.status)).toEqual(['running', 'paused']);
     expect(events.at(-1)).toMatchObject({ kind: 'done', status: 'cancelled', message: 'client-cancelled' });
   });
 
@@ -63,7 +64,7 @@ describe('TurnRunner: replayed spike streams', () => {
 
   it('cancel while streaming text merges deltas and finishes cancelled', () => {
     const { events } = replay('cancel-slow');
-    const text = events.filter((e) => e.kind === 'text').map((e: any) => e.delta).join('');
+    const text = events.filter((e) => e.kind === 'text').map((e) => e.delta).join('');
     expect(text).toBe('word '.repeat(14));
     expect(events.at(-1)).toMatchObject({ kind: 'done', status: 'cancelled' });
   });
@@ -71,12 +72,12 @@ describe('TurnRunner: replayed spike streams', () => {
   it('MCP server down surfaces as done error', () => {
     const { events } = replay('mcp-down');
     expect(events.at(-1)).toMatchObject({ kind: 'done', status: 'error' });
-    expect((events.at(-1) as any).message).toMatch(/^\[MCP Error\]/);
+    expect(loose(events.at(-1)).message).toMatch(/^\[MCP Error\]/);
   });
 });
 
 describe('TurnRunner: details', () => {
-  const base = (extra: any[]) => [
+  const base = (extra: RawEvent[]) => [
     { type: 'turn.created', id: 'a', turnId: 'T' },
     { type: 'model.message', id: 'm1', threadId: 'main' },
     ...extra,
@@ -142,7 +143,7 @@ describe('consumeTurn: resubscribe', () => {
       expect(turnId).toBeTruthy();
       expect(after).toBe(shellId); // last non-delta event = the model.message shell
       for (const ev of full.slice(3)) yield ev; // server replays that message's deltas from the start
-    } as any;
+    } as unknown as FakeClient['subscribe'];
     client.script('m', firstPart);
     const { events, push } = collect();
     const runner = new TurnRunner('r', push);
@@ -151,7 +152,7 @@ describe('consumeTurn: resubscribe', () => {
     expect(runner.finished).toBe(true);
     expect(events.filter((e) => e.kind === 'toolCall')).toHaveLength(2);
     expect(events.filter((e) => e.kind === 'approval')).toHaveLength(1);
-    expect((events.find((e) => e.kind === 'toolCall') as any).args).toEqual({ path: 'src/app.py' });
+    expect(loose(events.find((e) => e.kind === 'toolCall')).args).toEqual({ path: 'src/app.py' });
   });
 
   it('gives up after 3 resumes with a done error', async () => {
@@ -159,7 +160,8 @@ describe('consumeTurn: resubscribe', () => {
     let subs = 0;
     client.subscribe = async function* () {
       subs++;
-    } as any;
+      yield* [] as RawEvent[];
+    } as unknown as FakeClient['subscribe'];
     client.script('m', okTurn().slice(0, 1));
     const { events, push } = collect();
     const runner = new TurnRunner('r', push);

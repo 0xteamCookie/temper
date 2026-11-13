@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunEvent } from '../../src/shared/types';
 import { ModelRouter, ModelUnavailableError } from '../../src/trueforge';
-import { FakeClient, collect, errorTurn, okTurn } from './helpers';
+import { FakeClient, collect, errorTurn, loose, okTurn } from './helpers';
 
 const spec = (model: string) => ({ model: { name: model } });
 const E401 = '[Model Error] Request failed (401): mock 401';
@@ -36,7 +36,7 @@ describe('ModelRouter', () => {
     const r = make(c, ['a', 'b']);
     const { events, p } = run(r);
     expect(await p).toMatchObject({ status: 'done', model: 'b' });
-    const fb = events.find((e) => e.kind === 'fallback') as any;
+    const fb = loose(events.find((e) => e.kind === 'fallback'));
     expect(fb).toMatchObject({ from: 'a', to: 'b' });
     expect(fb.reason).toContain('401');
     expect(r.getHealth().a).toMatchObject({ health: 'failing' });
@@ -58,7 +58,7 @@ describe('ModelRouter', () => {
     const r = make(c, ['a', 'b'], { retries: 2, baseDelayMs: 100 });
     const { events, p } = run(r);
     expect(await p).toMatchObject({ status: 'done', model: 'a' });
-    expect(events.filter((e) => e.kind === 'retry').map((e: any) => [e.attempt, e.delayMs])).toEqual([[1, 100], [2, 200]]);
+    expect(events.filter((e) => e.kind === 'retry').map((e) => [e.attempt, e.delayMs])).toEqual([[1, 100], [2, 200]]);
     expect(sleeps).toEqual([100, 200]);
     expect(events.find((e) => e.kind === 'fallback')).toBeUndefined();
   });
@@ -83,7 +83,7 @@ describe('ModelRouter', () => {
     const { events, p } = run(make(c, ['a', 'b']), { hasSideEffects: () => true });
     expect((await p).status).toBe('error');
     expect(kinds(events)).not.toContain('fallback');
-    const done = events.at(-1) as any;
+    const done = loose(events.at(-1));
     expect(done.status).toBe('error');
     expect(done.message).toContain('already staged');
     expect(c.sessions).toHaveLength(1);
@@ -94,21 +94,21 @@ describe('ModelRouter', () => {
     const { events, p } = run(make(c, ['a', 'b']));
     expect((await p).status).toBe('error');
     expect(kinds(events)).not.toContain('fallback');
-    expect((events.at(-1) as any).message).toContain('[MCP Error]');
+    expect(loose(events.at(-1)).message).toContain('[MCP Error]');
   });
 
   it('does not fall back when disabled', async () => {
     const c = new FakeClient().script('a', errorTurn(E401)).script('b', okTurn());
     const { events, p } = run(make(c, ['a', 'b'], { fallbackEnabled: false }));
     expect((await p).status).toBe('error');
-    expect((events.at(-1) as any).message).toContain('fallback is turned off');
+    expect(loose(events.at(-1)).message).toContain('fallback is turned off');
   });
 
   it('reports every model tried when the chain is exhausted', async () => {
     const c = new FakeClient().script('a', errorTurn(E401)).script('b', errorTurn('[Model Error] Cannot connect to API: ECONNREFUSED'));
     const { events, p } = run(make(c, ['a', 'b']));
     expect((await p).status).toBe('error');
-    const msg = (events.at(-1) as any).message as string;
+    const msg = loose(events.at(-1)).message as string;
     expect(msg).toContain('a (authentication failed');
     expect(msg).toContain('b (provider unreachable');
     expect(msg).toContain('401');
@@ -147,6 +147,6 @@ describe('ModelRouter', () => {
   it('errors clearly with an empty chain', async () => {
     const { events, p } = run(make(new FakeClient(), []));
     expect((await p).status).toBe('error');
-    expect((events.at(-1) as any).message).toMatch(/No model is configured/);
+    expect(loose(events.at(-1)).message).toMatch(/No model is configured/);
   });
 });
