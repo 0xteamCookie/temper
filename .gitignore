@@ -1,0 +1,27 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# local TrueForge state (SQLite DB contains provider keys)
+.trueforge/
+
+# private planning notes, competition brief, throwaway spikes
+notes/
+spike/
+.impeccable/
+
+# build / deps
+node_modules/
+dist/
+out/
+*.vsix
+.vscode-test/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
+
+# tooling
+*.tsbuildinfo
+.vscode-test-web/
