@@ -16,3 +16,5 @@ export {
 } from './errors';
 export { ModelRouter } from './router';
 export type { ModelHealthEntry, RouterConfig, RouterOptions, RunRequest, RunResult } from './router';
+export { createSessionPreferNamed } from './namedAgent';
+export type { AgentRef, NamedAgentApi } from './namedAgent';

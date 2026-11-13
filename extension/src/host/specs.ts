@@ -19,6 +19,12 @@ export function manifestOf(file: unknown): Record<string, unknown> {
   throw new Error('Agent spec has no "manifest" (or "model") section.');
 }
 
+/** Registry identity of each mode's agent (the bundled files' name and description). */
+export function agentRef(mode: RunMode): { name: string; description: string } {
+  const f = (mode === 'agent' ? agentFile : inlineFile) as { name: string; description: string };
+  return { name: f.name, description: f.description };
+}
+
 export function bundledSpec(mode: RunMode): Record<string, unknown> {
   return manifestOf(mode === 'agent' ? agentFile : inlineFile);
 }

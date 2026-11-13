@@ -79,6 +79,10 @@ Then open the folder in VS Code and press `F5`, choosing the **Run Temper Extens
 
 Optional demo project: `scripts/setup-flask-demo.sh [path]` clones Flask 3.1.3 and prepares a virtual environment (default path `../flask`).
 
+### Agent definitions
+
+The agent definitions live in `agent/*.json`. When Temper connects, it registers them in TrueForge automatically as `temper-agent` and `temper-inline` (visible under Agents), with the model you picked for each mode. Every session is created by agent name, so the Sessions page shows which agent ran. The files hold a `${MODEL}` placeholder, so loading them by hand with `curl` does not work; use the automatic path. If registration fails, Temper falls back to inline specs and still runs.
+
 ## Configuration
 
 All settings live under `temper.*`.

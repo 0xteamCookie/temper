@@ -1,6 +1,7 @@
 // TrueForge connection: health polling, MCP server registration, model list. No vscode imports;
 // the extension host (temperHost.ts) turns its events into webview messages and the status bar.
 import type { ModelHealth, ModelInfo } from '../shared/types';
+import type { AgentSpec } from '../trueforge';
 import { MCP_SERVER_NAME } from './specs';
 
 export const MCP_DESCRIPTION =
@@ -10,6 +11,13 @@ export interface ConnectionClient {
   health(): Promise<{ ok: boolean; error?: string }>;
   listModels(): Promise<ModelInfo[]>;
   ensureMcpServer(name: string, url: string, description: string): Promise<void>;
+  upsertAgent?(name: string, description: string, manifest: AgentSpec): Promise<void>;
+}
+
+export interface AgentDef {
+  name: string;
+  description: string;
+  manifest: AgentSpec;
 }
 
 export interface ModelView {
@@ -50,6 +58,10 @@ export class TrueForgeConnection {
   private mcpUrl: string | undefined;
   private registeredFor: string | undefined;
   private checking = false;
+  private agentProvider: (() => Promise<AgentDef[]>) | undefined;
+  private agentsSig: string | undefined;
+  private agentWarned = false;
+  onLog: ((line: string) => void) | undefined;
   state: ConnectionState = { connected: false, models: [] };
   private readonly listeners = new Set<(s: ConnectionState) => void>();
 
@@ -67,7 +79,14 @@ export class TrueForgeConnection {
   setClient(client: ConnectionClient): Promise<void> {
     this.client = client;
     this.registeredFor = undefined;
+    this.agentsSig = undefined;
     return this.check();
+  }
+
+  /** Supplies the named agents to register (with their current models) whenever TrueForge is reachable. */
+  setAgentProvider(fn: () => Promise<AgentDef[]>): void {
+    this.agentProvider = fn;
+    this.agentsSig = undefined;
   }
 
   setMcpUrl(url: string): void {
@@ -111,9 +130,28 @@ export class TrueForgeConnection {
       } catch (e) {
         detail ??= `Could not list models: ${e instanceof Error ? e.message : String(e)}`;
       }
+      await this.syncAgents();
       this.set({ connected: true, detail, models });
     } finally {
       this.checking = false;
+    }
+  }
+
+  /** Upsert the named agents when connecting or when a mode's model pick changes. Never fails the check. */
+  private async syncAgents(): Promise<void> {
+    const upsert = this.client.upsertAgent?.bind(this.client);
+    if (!this.agentProvider || !upsert) return;
+    try {
+      const defs = await this.agentProvider();
+      const sig = JSON.stringify(defs);
+      if (sig === this.agentsSig) return;
+      for (const d of defs) await upsert(d.name, d.description, d.manifest);
+      this.agentsSig = sig;
+    } catch (e) {
+      if (!this.agentWarned) {
+        this.agentWarned = true;
+        this.onLog?.(`Could not register the Temper agents in TrueForge (${e instanceof Error ? e.message : String(e)}); sessions will use inline specs.`);
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FailureKind, ModelHealth, RunEvent, RunMode } from '../shared/types';
 import type { AgentSpec, TrueForgeClientLike } from './client';
+import type { AgentRef } from './namedAgent';
 import { classifyFailure, describeFailure, isFallbackEligible, isRetryable, ModelUnavailableError } from './errors';
 import { consumeTurn, TurnRunner } from './turnRunner';
 
@@ -24,6 +25,8 @@ export interface RunRequest {
   mode: RunMode;
   /** Builds the agent spec for a TrueForge model name. */
   buildSpec: (model: string) => AgentSpec;
+  /** Registered TrueForge agent to create sessions by name; omit for inline specs. */
+  agent?: AgentRef;
   prompt: string;
   signal?: AbortSignal;
   /** True once the turn has staged/applied anything that a replay could duplicate. */
@@ -191,7 +194,7 @@ export class ModelRouter {
     const { signal } = req;
     let sessionId: string;
     try {
-      sessionId = (await this.client.createSession(req.buildSpec(model))).id;
+      sessionId = (await this.client.createSession(req.buildSpec(model), req.agent)).id;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       if (e instanceof ModelUnavailableError) return { type: 'failure', kind: 'unknownModel', message };

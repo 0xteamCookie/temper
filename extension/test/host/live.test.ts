@@ -106,6 +106,7 @@ describe.skipIf(!live)('live agent run (TrueForge + real model)', () => {
         const done = events.find((e) => e.kind === 'done');
         expect(result?.status, done && 'message' in done ? String(done.message) : undefined).toBe('done');
         expect(events.some((e) => e.kind === 'approval')).toBe(true);
+        expect((await client.getAgent('temper-agent'))?.name).toBe('temper-agent');
       } finally {
         await mcp.stop();
       }

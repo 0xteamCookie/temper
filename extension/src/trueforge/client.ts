@@ -1,5 +1,7 @@
 import { TrueForge } from '@truefoundry/trueforge-sdk';
 import type { ApprovalDecision, ModelInfo } from '../shared/types';
+import { createSessionPreferNamed } from './namedAgent';
+import type { AgentRef } from './namedAgent';
 import {
   ModelUnavailableError,
   TrueForgeError,
@@ -29,7 +31,8 @@ export interface StreamOptions {
 
 /** The surface used by TurnRunner / ModelRouter; implemented by TrueForgeClient and by test fakes. */
 export interface TrueForgeClientLike {
-  createSession(spec: AgentSpec): Promise<{ id: string }>;
+  /** With `agent`, the session is created by that registered agent's name (falls back to an inline spec). */
+  createSession(spec: AgentSpec, agent?: AgentRef): Promise<{ id: string }>;
   streamTurn(sessionId: string, text: string, opts?: StreamOptions): AsyncIterable<RawEvent>;
   subscribe(sessionId: string, turnId: string, afterEventId?: string, signal?: AbortSignal): AsyncIterable<RawEvent>;
   approve(sessionId: string, turnId: string, threadId: string, toolCallId: string, decision: ApprovalDecision): Promise<void>;
@@ -77,9 +80,13 @@ function toTypedError(e: unknown, what: string): Error {
 export class TrueForgeClient implements TrueForgeClientLike {
   readonly baseUrl: string;
   private readonly sdk: TrueForge;
+  private readonly log?: (line: string) => void;
+  private readonly lastManifest = new Map<string, string>();
+  private warned = false;
 
   /** `baseUrl` is the server root (e.g. http://127.0.0.1:8790), not `.../api/v1`. */
-  constructor(opts: { baseUrl: string }) {
+  constructor(opts: { baseUrl: string; log?: (line: string) => void }) {
+    this.log = opts.log;
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.sdk = new TrueForge({ baseUrl: this.baseUrl });
   }
@@ -153,11 +160,64 @@ export class TrueForgeClient implements TrueForgeClientLike {
     if (put.status < 200 || put.status >= 300) this.failHttp('Update model provider', put.status, put.data);
   }
 
+  /* ---------------- named agents ---------------- */
+
+  /** Look an agent up by name (TrueForge addresses agents by id, so this scans the list). */
+  async getAgent(name: string): Promise<{ id: string; name: string; description: string; manifest: unknown } | undefined> {
+    type Row = { id: string; name: string; description: string; manifest: unknown };
+    let token: string | undefined;
+    for (let page = 0; page < 20; page++) {
+      const q = new URLSearchParams({ limit: '100' });
+      if (token) q.set('page_token', token);
+      const { status, data } = await this.http('GET', `/api/v1/agents?${q}`);
+      if (status !== 200) this.failHttp('List agents', status, data);
+      const rows = rec(data).data;
+      const hit = (Array.isArray(rows) ? (rows as Row[]) : []).find((a) => a.name === name);
+      if (hit) return hit;
+      const next = rec(rec(data).pagination).next_page_token ?? rec(rec(data).pagination).next_token;
+      if (typeof next !== 'string' || !next) return undefined;
+      token = next;
+    }
+    return undefined;
+  }
+
+  /** Create the agent, or update it when it already exists (409). Skips the write when unchanged. */
+  async upsertAgent(name: string, description: string, manifest: AgentSpec): Promise<void> {
+    const sig = JSON.stringify([description, manifest]);
+    if (this.lastManifest.get(name) === sig) return;
+    const post = await this.http('POST', '/api/v1/agents', { name, description, manifest });
+    if (post.status < 200 || post.status >= 300) {
+      if (post.status !== 409) this.failHttp(`Register agent '${name}'`, post.status, post.data);
+      const existing = await this.getAgent(name);
+      if (!existing) this.failHttp(`Update agent '${name}'`, 409, post.data);
+      const put = await this.http('PUT', `/api/v1/agents/${encodeURIComponent(existing.id)}`, { description, manifest });
+      if (put.status < 200 || put.status >= 300) this.failHttp(`Update agent '${name}'`, put.status, put.data);
+    }
+    this.lastManifest.set(name, sig);
+  }
+
   /* ---------------- sessions and turns (SDK) ---------------- */
 
-  async createSession(spec: AgentSpec): Promise<{ id: string }> {
+  createSession(spec: AgentSpec, agent?: AgentRef): Promise<{ id: string }> {
+    return createSessionPreferNamed(
+      {
+        upsertAgent: (n, d, m) => this.upsertAgent(n, d, m),
+        createSessionByName: (n) => this.createSessionWith({ name: n }, spec),
+        createSessionInline: (sp) => this.createSessionWith({ spec: sp }, sp),
+      },
+      agent,
+      spec,
+      (line) => {
+        if (this.warned) return;
+        this.warned = true;
+        this.log?.(line);
+      },
+    );
+  }
+
+  private async createSessionWith(agent: { name: string } | { spec: AgentSpec }, spec: AgentSpec): Promise<{ id: string }> {
     try {
-      const res: unknown = await this.sdk.sessions.create({ agent: { spec } } as unknown as Parameters<SessionsApi['create']>[0]);
+      const res: unknown = await this.sdk.sessions.create({ agent } as unknown as Parameters<SessionsApi['create']>[0]);
       const id = rec(rec(res).data).id ?? rec(res).id;
       if (!id) throw new TrueForgeError('TrueForge returned no session id');
       return { id: id as string };

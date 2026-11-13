@@ -18,7 +18,7 @@ import { ApprovalBridge } from './approvalBridge';
 import type { ApprovalTarget, BridgeOutcome, DecisionOrigin } from './approvalBridge';
 import { applySymbolFlags } from './editTools';
 import type { EditToolRun, SymbolFlagRecord } from './editTools';
-import { buildSpec, loadSpecTemplate } from './specs';
+import { agentRef, buildSpec, loadSpecTemplate } from './specs';
 import { STAGING_TOOLS, STAGING_WAIT_MS, stagingOf } from './stagingTracker';
 import { ShadowWorktree } from './shadow';
 import { buildSymbolIndex } from './symbolIndex';
@@ -241,6 +241,7 @@ export class RunController {
     try {
       result = await this.router.run({
         mode: opts.mode,
+        agent: agentRef(opts.mode),
         buildSpec: (model): AgentSpec => buildSpec(template, model, { reviewMode: this.deps.getSettings().review.mode }),
         prompt: opts.prompt,
         signal: run.abort.signal,

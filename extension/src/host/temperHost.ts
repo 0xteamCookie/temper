@@ -7,7 +7,7 @@ import { startMcpServer, readOnlyTools } from '../mcp';
 import type { RunningMcpServer, TemperTool } from '../mcp';
 import { promptInstruction } from '../inline';
 import { TrueForgeClient } from '../trueforge';
-import type { AgentSpec, RawEvent, StreamOptions } from '../trueforge';
+import type { AgentRef, AgentSpec, RawEvent, StreamOptions } from '../trueforge';
 import type { HostMessage, WebviewMessage } from '../shared/messages';
 import type { ApprovalDecision, ModelInfo, RunEvent } from '../shared/types';
 import type { PanelBackend } from '../panel';
@@ -19,7 +19,8 @@ import { buildInlinePrompt, composeAgentPrompt } from './prompts';
 import { RunController } from './runController';
 import type { ReviewPresentation, RunUi } from './runController';
 import { computeModelView, TrueForgeConnection } from './trueforgeConnection';
-import type { ConnectionClient } from './trueforgeConnection';
+import type { AgentDef, ConnectionClient } from './trueforgeConnection';
+import { agentRef, buildSpec, loadSpecTemplate } from './specs';
 import { VscodeFileSystem, workspaceRootPath } from './vscodeAdapters';
 
 const BUDGET_KEY = 'temper.budgetTokens';
@@ -36,8 +37,11 @@ class ClientProxy implements ConnectionClient {
   ensureMcpServer(name: string, url: string, description: string) {
     return this.inner.ensureMcpServer(name, url, description);
   }
-  createSession(spec: AgentSpec) {
-    return this.inner.createSession(spec);
+  upsertAgent(name: string, description: string, manifest: AgentSpec) {
+    return this.inner.upsertAgent(name, description, manifest);
+  }
+  createSession(spec: AgentSpec, agent?: AgentRef) {
+    return this.inner.createSession(spec, agent);
   }
   streamTurn(sessionId: string, text: string, opts?: StreamOptions): AsyncIterable<RawEvent> {
     return this.inner.streamTurn(sessionId, text, opts);
@@ -83,8 +87,10 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   constructor(private readonly context: vscode.ExtensionContext) {
     const s = getSettings();
     this.baseUrl = s.trueforge.baseUrl;
-    this.client = new ClientProxy(new TrueForgeClient({ baseUrl: this.baseUrl }));
+    this.client = new ClientProxy(new TrueForgeClient({ baseUrl: this.baseUrl, log: (l) => this.log(l) }));
     this.connection = new TrueForgeConnection(this.client);
+    this.connection.onLog = (l) => this.log(l);
+    this.connection.setAgentProvider(() => this.agentDefs());
     this.editorReview = new EditorReview(this.root ? vscode.Uri.file(this.root) : undefined);
 
     const rootPath = this.root ?? process.cwd();
@@ -126,7 +132,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         const next = getSettings();
         if (next.trueforge.baseUrl !== this.baseUrl) {
           this.baseUrl = next.trueforge.baseUrl;
-          this.client.inner = new TrueForgeClient({ baseUrl: this.baseUrl });
+          this.client.inner = new TrueForgeClient({ baseUrl: this.baseUrl, log: (l) => this.log(l) });
           void this.connection.setClient(this.client);
         }
         this.engine?.setBudget(this.budget() || undefined, next.context.budgetPercent);
@@ -227,6 +233,20 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       { chain: s.models.chain, agentMode: s.models.agentMode, inlineEdit: s.models.inlineEdit },
       this.controller?.modelHealth() ?? {},
     );
+  }
+
+  /** The named agents to keep registered in TrueForge, with the model currently picked for each mode. */
+  private async agentDefs(): Promise<AgentDef[]> {
+    const s = getSettings();
+    const v = this.modelView();
+    const out: AgentDef[] = [];
+    for (const mode of ['agent', 'inline'] as const) {
+      const model = mode === 'agent' ? v.agentModel : v.inlineModel;
+      if (!model) continue;
+      const template = await loadSpecTemplate(mode, mode === 'agent' ? s.trueforge.agent : s.trueforge.inlineAgent);
+      out.push({ ...agentRef(mode), manifest: buildSpec(template, model, { reviewMode: s.review.mode }) });
+    }
+    return out;
   }
 
   private postModels(): void {
