@@ -10,7 +10,11 @@ All notable changes to this project are documented here. The format is based on 
 - Changeset overlay with per-hunk review and checkpoint undo.
 - Scope Fence and Symbol Check guards.
 - Context Ledger and budgeted retrieval.
-- Inline edit (`Ctrl+Alt+K`) with per-hunk accept/reject.
+- Inline edit (`Ctrl+Alt+K`): proposed lines are shown in the editor buffer without saving, with per-hunk accept/reject.
+- `Temper: Add Selection to Chat` (`Ctrl+Alt+L`) and `@file` / `@symbol` mentions.
+- Review view in the panel with per-file diff tabs; `temper.review.mode` (`endOfRun` or `perEdit`).
+- Named TrueForge agents `temper-agent` and `temper-inline`, registered on connect from `agent/*.json`.
+- `scripts/demo-task-c.mjs` and `scripts/setup-flask-demo.{sh,ps1}` for the Flask demo and the model-failure scenario.
 - Model chain with automatic fallback.
 - Allowlisted commands run in a shadow copy of the workspace.
 - Provider registration script (`node scripts/register-providers.mjs`).

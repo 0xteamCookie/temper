@@ -20,17 +20,17 @@ Other flags: `--watch` (re-run every 45 min to refresh the Vertex token), `--env
 
 Per provider (keyed by name: `anthropic`, `google-gemini`, `vertex`, `openrouter`, `groq`, `truefoundry`, `ollama`):
 
-| Field | Meaning |
-| --- | --- |
-| `enabled` | `false` skips the provider. A provider is also skipped when its credentials are missing from `.env`. |
-| `mode` | `pinned`: use exactly the ids in `models`; ids the provider does not report are warned and skipped. `discover`: pick from the provider's list using the filters below. (Vertex is always pinned.) |
-| `models` | Pinned model ids (upstream ids, e.g. `claude-sonnet-5-5`). |
-| `include` / `exclude` | Case-insensitive regex patterns tested against model ids (discover mode). |
-| `requirements` | `tools: true` drops models known not to support tool calling; `min_context` drops models with a smaller known context. Unknown metadata never disqualifies a model. |
-| `free_tier_suffix` | OpenRouter: when the key is on the free tier or out of credits, only ids ending in this suffix (`:free`) qualify. |
-| `prefer` | `context` (default) ranks by largest context window first. |
-| `max_models` | Cap on registered models for the provider (default 3). |
-| `aliases` | Optional `{ "<model id>": "<name>" }` display names. Names are sanitized to TrueForge resource names (lowercase letters, digits, hyphens). |
+| Field                 | Meaning                                                                                                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`             | `false` skips the provider. A provider is also skipped when its credentials are missing from `.env`.                                                                                              |
+| `mode`                | `pinned`: use exactly the ids in `models`; ids the provider does not report are warned and skipped. `discover`: pick from the provider's list using the filters below. (Vertex is always pinned.) |
+| `models`              | Pinned model ids (upstream ids, e.g. `claude-sonnet-5-5`).                                                                                                                                        |
+| `include` / `exclude` | Case-insensitive regex patterns tested against model ids (discover mode).                                                                                                                         |
+| `requirements`        | `tools: true` drops models known not to support tool calling; `min_context` drops models with a smaller known context. Unknown metadata never disqualifies a model.                               |
+| `free_tier_suffix`    | OpenRouter: when the key is on the free tier or out of credits, only ids ending in this suffix (`:free`) qualify.                                                                                 |
+| `prefer`              | `context` (default) ranks by largest context window first.                                                                                                                                        |
+| `max_models`          | Cap on registered models for the provider (default 3).                                                                                                                                            |
+| `aliases`             | Optional `{ "<model id>": "<name>" }` display names. Names are sanitized to TrueForge resource names (lowercase letters, digits, hyphens).                                                        |
 
 ## Temper settings
 

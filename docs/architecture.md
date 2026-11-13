@@ -20,23 +20,24 @@ Temper is a VS Code extension. The agent loop (model calls, tool calling, stream
 | `extension/src/trueforge` | Client for the TrueForge HTTP API: sessions, turns, SSE streaming, cancel, approvals, model chain and fallback |
 | `extension/src/mcp`       | MCP server over HTTP on `127.0.0.1` exposing editor tools to the agent                                         |
 | `extension/src/context`   | Indexing, retrieval, token budgeting and the Context Ledger                                                    |
-| `extension/src/changeset` | In-memory overlay of proposed edits, hunks, apply, checkpoints, shadow worktree                                |
+| `extension/src/changeset` | In-memory overlay of proposed edits, fuzzy edit matching, hunks, apply and checkpoints                         |
+| `extension/src/host`      | Wiring: run controller, edit tools, command policy, shadow worktree, agent specs, TrueForge connection         |
 | `extension/src/guards`    | Scope Fence and Symbol Check                                                                                   |
-| `extension/src/inline`    | Inline edit controller, decorations and CodeLens                                                               |
-| `extension/src/review`    | Multi-file review                                                                                              |
+| `extension/src/inline`    | Inline edit: in-buffer diff, decorations and per-hunk CodeLens                                                 |
+| `extension/src/review`    | Multi-file review: diff tabs for proposed content                                                              |
 | `extension/src/config`    | Typed access to `temper.*` settings                                                                            |
-| `extension/webview-ui`    | React and Vite panel                                                                                           |
+| `extension/webview-ui`    | React and Vite panel: chat, Context Ledger, Review and Models views                                            |
 | `agent/`                  | TrueForge agent specs                                                                                          |
 
 ## MCP tools
 
-The extension serves these tools: `read_file`, `list_dir`, `search_code`, `find_symbol`, `get_context`, `propose_edit`, `submit_changeset`, `run_command`. Read-only tools run without approval. `submit_changeset` is gated by a TrueForge approval, which opens the review UI.
+The extension serves these tools: `read_file`, `list_dir`, `search_code`, `find_symbol`, `get_context`, `propose_edit`, `create_file`, `submit_changeset`, `run_command`. `submit_changeset` is gated by a TrueForge approval (`require_approval_for_tools` in the agent spec), which opens the review. With `temper.review.mode` set to `perEdit`, `propose_edit` and `create_file` are gated as well. The agent specs register the server as `temper` and mark its tools as deferred (`preload: false`); the inline spec preloads four of them.
 
 ## Flows
 
-**Agent mode.** The user's request starts a TrueForge session with the main agent. The agent explores with read-only tools and calls `get_context`, which returns a budgeted pack and fills the Context Ledger. It records edits with `propose_edit` into the in-memory changeset, optionally runs allowlisted commands in a shadow worktree, then calls `submit_changeset`. The turn pauses for approval; accepting applies only the accepted hunks through a `WorkspaceEdit` and records a checkpoint. Denying sends the reason back to the agent.
+**Agent mode.** The user's request starts a TrueForge session from the named agent `temper-agent`, which the extension registers on connect (with `temper-inline` for inline edits). The agent explores with read-only tools and calls `get_context`, which returns a budgeted pack and fills the Context Ledger. It records edits with `propose_edit` into the in-memory changeset, optionally runs allowlisted commands in a shadow worktree, then calls `submit_changeset`. The turn pauses for approval; accepting applies only the accepted hunks through a `WorkspaceEdit` and records a checkpoint. Denying sends the reason back to the agent.
 
-**Inline edit.** The user selects code and runs `Temper: Edit Selection` (`Ctrl+Alt+K`). A short session runs with the inline agent spec. Proposed edits stream into an inline diff with per-hunk Accept and Reject. Scope Fence marks hunks outside the selection.
+**Inline edit.** The user selects code and runs `Temper: Edit Selection` (`Ctrl+Alt+K`). A short session runs with the inline agent spec. Proposed lines are shown in the editor buffer directly below the lines they replace, without saving; each hunk has Accept and Reject, and the temporary lines are removed before anything is applied. Scope Fence marks hunks outside the selection.
 
 **Cancel.** The extension cancels the TrueForge session and discards the overlay, or offers a partial review. Disk is untouched before an accept.
 

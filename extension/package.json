@@ -10,6 +10,7 @@
     "url": "git+https://github.com/0xteamCookie/temper.git",
     "directory": "extension"
   },
+  "homepage": "https://github.com/0xteamCookie/temper#readme",
   "bugs": {
     "url": "https://github.com/0xteamCookie/temper/issues"
   },
