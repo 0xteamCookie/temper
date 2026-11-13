@@ -149,4 +149,36 @@ describe('ModelRouter', () => {
     expect((await p).status).toBe('error');
     expect(loose(events.at(-1)).message).toMatch(/No model is configured/);
   });
+
+  describe('continuing a session', () => {
+    it('posts the turn to the existing session without creating one', async () => {
+      const c = new FakeClient().script('a', okTurn('t1'), okTurn('t2'));
+      const r = make(c, ['a', 'b']);
+      const first = await run(r).p;
+      expect(first.sessionId).toBe('s1');
+      const { p } = run(r, { session: { id: 's1', model: 'a' } });
+      expect(await p).toMatchObject({ status: 'done', model: 'a', sessionId: 's1' });
+      expect(c.sessions).toHaveLength(1);
+    });
+
+    it('tries the session model first even when another model is picked', async () => {
+      const c = new FakeClient().script('a', okTurn('t1'), okTurn('t2'));
+      const r = make(c, ['a', 'b']);
+      await run(r).p;
+      const res = await run(r, { session: { id: 's1', model: 'a' }, pick: 'b' }).p;
+      expect(res.model).toBe('a');
+      expect(c.sessions).toHaveLength(1);
+    });
+
+    it('starts a new session when falling back to another model', async () => {
+      const c = new FakeClient()
+        .script('a', okTurn('t1'), errorTurn(E401))
+        .script('b', okTurn('t3'));
+      const r = make(c, ['a', 'b']);
+      await run(r).p;
+      const res = await run(r, { session: { id: 's1', model: 'a' } }).p;
+      expect(res).toMatchObject({ status: 'done', model: 'b', sessionId: 's2' });
+      expect(c.sessions.map((x) => x.model)).toEqual(['a', 'b']);
+    });
+  });
 });

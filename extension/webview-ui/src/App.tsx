@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useReducer } from 'react';
 import { Chat } from './components/Chat';
 import { Composer } from './components/Composer';
 import { Header, SubHeader } from './components/Header';
+import { History } from './components/History';
 import { Models } from './components/Models';
 import { Review } from './components/Review';
 import { Icon } from './components/ui';
@@ -50,16 +51,39 @@ export function App() {
   const toConversation = () => dispatch({ t: 'view', view: 'conversation' });
   const toReview = () => dispatch({ t: 'view', view: 'review' });
   const toModels = () => dispatch({ t: 'view', view: 'models' });
+  const requestHistory = (pageToken?: string) => {
+    dispatch({ t: 'historyLoading' });
+    postToHost({ type: 'history.list', pageToken });
+  };
+  const toHistory = () => {
+    dispatch({ t: 'view', view: 'history' });
+    requestHistory();
+  };
+  const newChat = () => {
+    dispatch({ t: 'newChat' });
+    postToHost({ type: 'session.new' });
+  };
 
   const hunks = state.review?.changes.reduce((n, c) => n + c.hunks.length, 0) ?? 0;
   const files = state.review?.changes.length ?? 0;
 
   return (
     <div className="app">
-      <Header state={state} onToggleModels={() => (view === 'models' ? toConversation() : toModels())} />
+      <Header
+        state={state}
+        onToggleModels={() => (view === 'models' ? toConversation() : toModels())}
+        onToggleHistory={() => (view === 'history' ? toConversation() : toHistory())}
+        onNewChat={newChat}
+      />
       {view !== 'conversation' && <SubHeader view={view} onBack={toConversation} />}
 
       <div className="scroll" hidden={view !== 'conversation'}>
+        {state.notice && (
+          <div className="callout callout-warn session-notice" role="status">
+            <Icon name="warning" />
+            <span>{state.notice}</span>
+          </div>
+        )}
         {state.review && (
           <div className="pending-bar" role="status">
             <Icon name="diff" />
@@ -93,6 +117,17 @@ export function App() {
         </div>
       )}
 
+      {view === 'history' && (
+        <div className="scroll">
+          <History
+            history={state.history}
+            sessionId={state.sessionId}
+            running={running}
+            onMore={() => requestHistory(state.history.next)}
+          />
+        </div>
+      )}
+
       {view === 'models' && (
         <div className="scroll">
           <Models
@@ -112,6 +147,7 @@ export function App() {
       <div hidden={view !== 'conversation'}>
         <Composer
           running={running}
+          reviewPending={!!state.review}
           suggestions={state.suggestions}
           selection={state.selection}
           focus={state.focus}

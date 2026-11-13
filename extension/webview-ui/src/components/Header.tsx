@@ -1,8 +1,20 @@
+import { isRunning } from '../state';
 import type { State, View } from '../state';
 import { postToHost } from '../vscode';
 import { IconButton } from './ui';
 
-export function Header({ state, onToggleModels }: { state: State; onToggleModels: () => void }) {
+export function Header({
+  state,
+  onToggleModels,
+  onToggleHistory,
+  onNewChat,
+}: {
+  state: State;
+  onToggleModels: () => void;
+  onToggleHistory: () => void;
+  onNewChat: () => void;
+}) {
+  const busy = isRunning(state);
   const conn = state.connection;
   const tone = conn.trueforge === 'connected' ? 'ok' : conn.trueforge === 'disconnected' ? 'bad' : 'unknown';
   const word = conn.trueforge === 'connected' ? 'TrueForge' : conn.trueforge === 'disconnected' ? 'Offline' : 'Connecting';
@@ -22,6 +34,19 @@ export function Header({ state, onToggleModels }: { state: State; onToggleModels
       </span>
       <span className="spacer" />
       <IconButton
+        icon="add"
+        label="New chat"
+        title={busy ? 'Stop the current run before starting a new chat' : 'New chat'}
+        disabled={busy}
+        onClick={onNewChat}
+      />
+      <IconButton
+        icon="history"
+        label="History"
+        pressed={state.view === 'history'}
+        onClick={onToggleHistory}
+      />
+      <IconButton
         icon="discard"
         label={state.canUndo ? `Undo: ${state.undoLabel ?? 'last change'}` : 'Undo last change'}
         disabled={!state.canUndo}
@@ -40,7 +65,9 @@ export function SubHeader({ view, onBack }: { view: Exclude<View, 'conversation'
         <span className="codicon codicon-arrow-left" aria-hidden="true" />
         Conversation
       </button>
-      <span className="sub-title">{view === 'review' ? 'Review' : 'Models'}</span>
+      <span className="sub-title">
+        {view === 'review' ? 'Review' : view === 'history' ? 'History' : 'Models'}
+      </span>
     </div>
   );
 }

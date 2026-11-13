@@ -8,6 +8,7 @@ import type {
   RunMetrics,
 } from '../../src/shared/types';
 import type { ProviderPanelState } from '../../src/shared/providers';
+import type { SessionSummary, TranscriptTurn } from '../../src/shared/sessions';
 
 export type RunStatus = 'running' | 'paused' | 'done' | 'error' | 'cancelled';
 
@@ -81,7 +82,16 @@ export interface ReviewState {
   changes: FileChange[];
 }
 
-export type View = 'conversation' | 'review' | 'models';
+export type View = 'conversation' | 'review' | 'models' | 'history';
+
+export interface HistoryState {
+  sessions: SessionSummary[];
+  next?: string;
+  loading: boolean;
+  error?: string;
+  /** Set when opening a session failed. */
+  loadError?: string;
+}
 
 export interface State {
   view: View;
@@ -101,6 +111,11 @@ export interface State {
   canUndo: boolean;
   undoLabel?: string;
   suggestions?: { query: string; items: Mention[] };
+  /** The TrueForge session the next message continues (undefined = a new chat). */
+  sessionId?: string;
+  /** Shown above the chat after loading a session that could not be fully restored. */
+  notice?: string;
+  history: HistoryState;
   seq: number;
 }
 
@@ -115,6 +130,7 @@ export const initialState: State = {
   inlineModel: '',
   providers: { rows: [], busy: null },
   canUndo: false,
+  history: { sessions: [], loading: false },
   seq: 0,
 };
 
@@ -124,6 +140,9 @@ export type Action =
   | { t: 'view'; view: View }
   | { t: 'fill'; text: string }
   | { t: 'reset' }
+  /** Clear the chat for a new session (the host forgets the current one). */
+  | { t: 'newChat' }
+  | { t: 'historyLoading' }
   | { t: 'decide'; hunkIds: string[]; decision: HunkDecision }
   | { t: 'decideAll'; decision: HunkDecision }
   | { t: 'clearSuggestions' }
@@ -285,6 +304,7 @@ export function reducer(state: State, a: Action): State {
     case 'userSend':
       return {
         ...state,
+        notice: undefined,
         seq: state.seq + 1,
         items: [
           ...state.items,
@@ -305,6 +325,18 @@ export function reducer(state: State, a: Action): State {
         inlineModel: state.inlineModel,
         providers: state.providers,
         selection: state.selection,
+      };
+    case 'newChat':
+      return {
+        ...reducer(state, { t: 'reset' }),
+        canUndo: state.canUndo,
+        undoLabel: state.undoLabel,
+        history: state.history,
+      };
+    case 'historyLoading':
+      return {
+        ...state,
+        history: { ...state.history, loading: true, error: undefined, loadError: undefined },
       };
     case 'decide':
       return state.review
@@ -368,7 +400,52 @@ function reduceHost(state: State, m: HostMessage): State {
       return { ...state, suggestions: { query: m.query, items: m.items } };
     case 'connection':
       return { ...state, connection: { trueforge: m.trueforge, detail: m.detail } };
+    case 'history.page':
+      return {
+        ...state,
+        history: {
+          sessions: m.append ? [...state.history.sessions, ...m.sessions] : m.sessions,
+          next: m.nextPageToken,
+          loading: false,
+          error: m.error,
+        },
+      };
+    case 'session.loaded': {
+      const { items, seq } = transcriptItems(m.turns, state.seq);
+      return {
+        ...state,
+        items,
+        seq,
+        sessionId: m.sessionId,
+        notice: m.notice,
+        review: undefined,
+        ledger: undefined,
+        view: 'conversation',
+        history: { ...state.history, loadError: undefined },
+      };
+    }
+    case 'session.loadFailed':
+      return { ...state, history: { ...state.history, loadError: m.message } };
+    case 'session.current':
+      return { ...state, sessionId: m.sessionId };
   }
+}
+
+/** Replay a loaded session's turns through the same reducer path live runs use. */
+function transcriptItems(
+  turns: TranscriptTurn[],
+  seq0: number,
+): { items: ChatItem[]; seq: number } {
+  let seq = seq0;
+  const items: ChatItem[] = [];
+  for (const t of turns) {
+    if (t.user !== undefined)
+      items.push({ kind: 'user', id: `u${seq++}`, text: t.user, mentions: [] });
+    let run = emptyRun(t.turnId);
+    for (const e of t.events) run = applyRunEvent(run, e, ++seq);
+    items.push(run);
+  }
+  return { items, seq };
 }
 
 export function isRunning(state: State): boolean {

@@ -39,7 +39,7 @@ function parseArgs(raw: unknown): unknown {
 }
 
 /** Deferred tools are invoked through `call_tool`; report the inner tool and its input instead. */
-function unwrapCall(name: string, rawArgs: unknown): { name: string; args: unknown } {
+export function unwrapCall(name: string, rawArgs: unknown): { name: string; args: unknown } {
   const args = parseArgs(rawArgs);
   if (name === 'call_tool' && args && typeof args === 'object') {
     const a = args as Rec;

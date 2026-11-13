@@ -1,6 +1,6 @@
 // Shown only in the dev harness (outside VS Code).
 import { useEffect, useState } from 'react';
-import { replay, reset, setServer, toggleSelection } from '../demo';
+import { loadSession, replay, reset, setServer, toggleSelection } from '../demo';
 
 type Theme = 'dark' | 'light' | 'hc' | 'hc-light';
 
@@ -32,6 +32,19 @@ export function DevBar() {
         <option value="empty">No models</option>
         <option value="down">TrueForge down</option>
       </select>
+      <button className="btn btn-sm" onClick={() => loadSession()}>
+        Load session
+      </button>
+      <button
+        className="btn btn-sm"
+        onClick={() =>
+          loadSession(
+            'The last turn of this session is still running or waiting for approval in TrueForge. Sending a message now will cancel it.',
+          )
+        }
+      >
+        Load unfinished
+      </button>
       <button className="btn btn-sm" onClick={() => toggleSelection()}>
         Toggle selection
       </button>
