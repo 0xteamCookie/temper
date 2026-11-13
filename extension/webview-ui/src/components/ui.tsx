@@ -5,7 +5,15 @@ import { postToHost } from '../vscode';
 
 /* ------------------------------ icons ------------------------------ */
 
-export function Icon({ name, spin, className }: { name: string; spin?: boolean; className?: string }) {
+export function Icon({
+  name,
+  spin,
+  className,
+}: {
+  name: string;
+  spin?: boolean;
+  className?: string;
+}) {
   return (
     <span
       className={`codicon codicon-${name}${spin ? ' codicon-modifier-spin' : ''}${className ? ` ${className}` : ''}`}
@@ -15,7 +23,9 @@ export function Icon({ name, spin, className }: { name: string; spin?: boolean; 
 }
 
 export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  const [reduced, setReduced] = useState(
+    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+  );
   useEffect(() => {
     const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     if (!mq) return;
@@ -88,23 +98,31 @@ export function summarizeArgs(args: unknown, max = 60): string {
   else if (typeof args === 'object') {
     const o = args as Record<string, unknown>;
     const pref = ['path', 'file', 'file_path', 'command', 'query', 'pattern', 'url', 'name'];
-    const key = pref.find((k) => typeof o[k] === 'string') ?? Object.keys(o).find((k) => typeof o[k] === 'string');
+    const key =
+      pref.find((k) => typeof o[k] === 'string') ??
+      Object.keys(o).find((k) => typeof o[k] === 'string');
     s = key ? String(o[key]) : JSON.stringify(args);
   } else s = String(args);
   s = s.replace(/\s+/g, ' ').trim();
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
-export function fmtTokens(n: number): string {
-  return n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n);
-}
+import { fmtTokens } from '../../../src/shared/format';
+export { fmtTokens };
 
-const HEALTH_TONE: Record<ModelHealth, 'ok' | 'bad' | 'unknown'> = { ok: 'ok', failing: 'bad', unknown: 'unknown' };
+const HEALTH_TONE: Record<ModelHealth, 'ok' | 'bad' | 'unknown'> = {
+  ok: 'ok',
+  failing: 'bad',
+  unknown: 'unknown',
+};
 
 /** Dot + word so health is never colour-only. */
 export function HealthPill({ health, lastError }: { health: ModelHealth; lastError?: string }) {
   return (
-    <span className={`pill pill-${HEALTH_TONE[health]}`} title={lastError ? `${health}: ${lastError}` : `Health: ${health}`}>
+    <span
+      className={`pill pill-${HEALTH_TONE[health]}`}
+      title={lastError ? `${health}: ${lastError}` : `Health: ${health}`}
+    >
       <span className="dot" aria-hidden="true" />
       {health}
     </span>
@@ -171,7 +189,8 @@ export function Picker({
     const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin));
     const spaceAbove = r.top - margin;
     const spaceBelow = window.innerHeight - r.bottom - margin;
-    const up = placement === 'up' || (placement === 'auto' && spaceBelow < 220 && spaceAbove > spaceBelow);
+    const up =
+      placement === 'up' || (placement === 'auto' && spaceBelow < 220 && spaceAbove > spaceBelow);
     const maxHeight = Math.max(120, Math.min(320, up ? spaceAbove - 4 : spaceBelow - 4));
     setPos(
       up
@@ -297,7 +316,11 @@ export function ModelPicker({
     aria: `${m.name}, ${m.provider}, ${m.health}${m.name === value ? ', current' : ''}`,
     node: (
       <>
-        <span className={`dot dot-${HEALTH_TONE[m.health]}`} aria-hidden="true" title={m.lastError ?? `Health: ${m.health}`} />
+        <span
+          className={`dot dot-${HEALTH_TONE[m.health]}`}
+          aria-hidden="true"
+          title={m.lastError ?? `Health: ${m.health}`}
+        />
         <span className="opt-main">
           <span className="ellipsis opt-name">{shortModel(m.name)}</span>
           <span className="ellipsis muted opt-sub">
@@ -348,7 +371,9 @@ export function ModelPicker({
           </>
         ) : (
           <>
-            {current && <span className={`dot dot-${HEALTH_TONE[current.health]}`} aria-hidden="true" />}
+            {current && (
+              <span className={`dot dot-${HEALTH_TONE[current.health]}`} aria-hidden="true" />
+            )}
             <span className="ellipsis" title={value}>
               {value || 'Choose a model'}
             </span>
@@ -361,7 +386,17 @@ export function ModelPicker({
 }
 
 /** Link-styled button that opens a workspace file in the editor. */
-export function FileLink({ path, line, label, className }: { path: string; line?: number; label?: ReactNode; className?: string }) {
+export function FileLink({
+  path,
+  line,
+  label,
+  className,
+}: {
+  path: string;
+  line?: number;
+  label?: ReactNode;
+  className?: string;
+}) {
   return (
     <button
       type="button"

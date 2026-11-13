@@ -2,6 +2,7 @@
 // review, status bar, output channel and the webview backend. Everything is async; activation never blocks.
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { fmtTokens } from '../shared/format';
 import { ContextEngine, createGetContextTool, createNodeReader } from '../context';
 import { getSettings } from '../config';
 import { startMcpServer, readOnlyTools } from '../mcp';
@@ -10,7 +11,12 @@ import { addToHistory, promptInstruction } from '../inline';
 import { selectionToLines } from '../inline/instructionModel';
 import { TrueForgeClient } from '../trueforge';
 import type { AgentRef, AgentSpec, RawEvent, StreamOptions } from '../trueforge';
-import type { ComposerMode, EditorSelection, HostMessage, WebviewMessage } from '../shared/messages';
+import type {
+  ComposerMode,
+  EditorSelection,
+  HostMessage,
+  WebviewMessage,
+} from '../shared/messages';
 import type { ApprovalDecision, ModelInfo, RunEvent } from '../shared/types';
 import type { PanelBackend } from '../panel';
 import { ChangesetWorkspace } from './changesetWorkspace';
@@ -48,10 +54,21 @@ class ClientProxy implements ConnectionClient {
   streamTurn(sessionId: string, text: string, opts?: StreamOptions): AsyncIterable<RawEvent> {
     return this.inner.streamTurn(sessionId, text, opts);
   }
-  subscribe(sessionId: string, turnId: string, afterEventId?: string, signal?: AbortSignal): AsyncIterable<RawEvent> {
+  subscribe(
+    sessionId: string,
+    turnId: string,
+    afterEventId?: string,
+    signal?: AbortSignal,
+  ): AsyncIterable<RawEvent> {
     return this.inner.subscribe(sessionId, turnId, afterEventId, signal);
   }
-  approve(sessionId: string, turnId: string, threadId: string, toolCallId: string, decision: ApprovalDecision) {
+  approve(
+    sessionId: string,
+    turnId: string,
+    threadId: string,
+    toolCallId: string,
+    decision: ApprovalDecision,
+  ) {
     return this.inner.approve(sessionId, turnId, threadId, toolCallId, decision);
   }
   cancel(sessionId: string) {
@@ -93,7 +110,9 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   constructor(private readonly context: vscode.ExtensionContext) {
     const s = getSettings();
     this.baseUrl = s.trueforge.baseUrl;
-    this.client = new ClientProxy(new TrueForgeClient({ baseUrl: this.baseUrl, log: (l) => this.log(l) }));
+    this.client = new ClientProxy(
+      new TrueForgeClient({ baseUrl: this.baseUrl, log: (l) => this.log(l) }),
+    );
     this.connection = new TrueForgeConnection(this.client);
     this.connection.onLog = (l) => this.log(l);
     this.connection.setAgentProvider(() => this.agentDefs());
@@ -105,7 +124,11 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     if (this.root) {
       this.engine = new ContextEngine(createNodeReader(rootPath), {
         excludes: s.context.exclude,
-        budget: { mode: s.context.budgetTokens > 0 ? 'fixed' : 'adaptive', percent: s.context.budgetPercent, tokens: this.budget() || undefined },
+        budget: {
+          mode: s.context.budgetTokens > 0 ? 'fixed' : 'adaptive',
+          percent: s.context.budgetPercent,
+          tokens: this.budget() || undefined,
+        },
       });
     }
     this.controller = new RunController({
@@ -145,7 +168,10 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         const next = getSettings();
         if (next.trueforge.baseUrl !== this.baseUrl) {
           this.baseUrl = next.trueforge.baseUrl;
-          this.client.inner = new TrueForgeClient({ baseUrl: this.baseUrl, log: (l) => this.log(l) });
+          this.client.inner = new TrueForgeClient({
+            baseUrl: this.baseUrl,
+            log: (l) => this.log(l),
+          });
           void this.connection.setClient(this.client);
         }
         this.engine?.setBudget(this.budget() || undefined, next.context.budgetPercent);
@@ -182,7 +208,8 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
           );
           this.subs.push(
             engine.ledger.onDidChange((e) => {
-              if (e.type === 'agentRead') this.send({ type: 'ledger.update', snapshot: e.snapshot });
+              if (e.type === 'agentRead')
+                this.send({ type: 'ledger.update', snapshot: e.snapshot });
             }),
           );
         }
@@ -203,8 +230,16 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
           services,
           port: settings.mcp.port,
           onToolCall: (name, args, result, ms) => {
-            this.log(`tool ${name}(${short(args, 80)}) -> ${result.isError ? 'ERROR ' : ''}${short(result.text, 100)} [${ms} ms]`);
-            if (name === 'read_file' && !result.isError && this.engine && args && typeof args === 'object') {
+            this.log(
+              `tool ${name}(${short(args, 80)}) -> ${result.isError ? 'ERROR ' : ''}${short(result.text, 100)} [${ms} ms]`,
+            );
+            if (
+              name === 'read_file' &&
+              !result.isError &&
+              this.engine &&
+              args &&
+              typeof args === 'object'
+            ) {
               const a = args as Record<string, unknown>;
               if (typeof a.path === 'string') {
                 this.engine.noteAgentRead(controller.activeRunId, {
@@ -220,10 +255,16 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         });
         this.connection.setMcpUrl(this.mcp.url);
         this.log(`MCP server listening on ${this.mcp.url}`);
-        void this.engine?.init().catch((e) => this.log(`context index failed: ${e instanceof Error ? e.message : String(e)}`));
+        void this.engine
+          ?.init()
+          .catch((e) =>
+            this.log(`context index failed: ${e instanceof Error ? e.message : String(e)}`),
+          );
       } catch (e) {
         this.log(`failed to start the MCP server: ${e instanceof Error ? e.message : String(e)}`);
-        void vscode.window.showErrorMessage(`Temper could not start its tool server: ${e instanceof Error ? e.message : String(e)}`);
+        void vscode.window.showErrorMessage(
+          `Temper could not start its tool server: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     } else {
       this.log('no workspace folder is open; Temper needs one to run agents');
@@ -256,20 +297,36 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     for (const mode of ['agent', 'inline'] as const) {
       const model = mode === 'agent' ? v.agentModel : v.inlineModel;
       if (!model) continue;
-      const template = await loadSpecTemplate(mode, mode === 'agent' ? s.trueforge.agent : s.trueforge.inlineAgent);
-      out.push({ ...agentRef(mode), manifest: buildSpec(template, model, { reviewMode: s.review.mode }) });
+      const template = await loadSpecTemplate(
+        mode,
+        mode === 'agent' ? s.trueforge.agent : s.trueforge.inlineAgent,
+      );
+      out.push({
+        ...agentRef(mode),
+        manifest: buildSpec(template, model, { reviewMode: s.review.mode }),
+      });
     }
     return out;
   }
 
   private postModels(): void {
     const v = this.modelView();
-    this.send({ type: 'models.update', models: v.models, chain: v.chain, agentModel: v.agentModel, inlineModel: v.inlineModel });
+    this.send({
+      type: 'models.update',
+      models: v.models,
+      chain: v.chain,
+      agentModel: v.agentModel,
+      inlineModel: v.inlineModel,
+    });
   }
 
   private postConnection(): void {
     const st = this.connection.state;
-    this.send({ type: 'connection', trueforge: st.connected ? 'connected' : 'disconnected', detail: st.detail });
+    this.send({
+      type: 'connection',
+      trueforge: st.connected ? 'connected' : 'disconnected',
+      detail: st.detail,
+    });
   }
 
   private renderStatus(): void {
@@ -282,8 +339,12 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     }
     const model = this.statusModelOverride ?? this.modelView().agentModel;
     this.status.text = `$(sparkle) Temper: ${model || 'no model'}`;
-    this.status.tooltip = model ? `Temper uses ${model} through TrueForge. Click to change.` : 'No model is configured in TrueForge.';
-    this.status.backgroundColor = model ? undefined : new vscode.ThemeColor('statusBarItem.warningBackground');
+    this.status.tooltip = model
+      ? `Temper uses ${model} through TrueForge. Click to change.`
+      : 'No model is configured in TrueForge.';
+    this.status.backgroundColor = model
+      ? undefined
+      : new vscode.ThemeColor('statusBarItem.warningBackground');
   }
 
   post(msg: HostMessage): void {
@@ -313,7 +374,9 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.lastSessionId = ev.sessionId;
         this.statusModelOverride = ev.model;
         this.renderStatus();
-        this.log(`run ${ev.runId.slice(0, 8)} (${ev.mode}) started on ${ev.model}, session ${ev.sessionId}`);
+        this.log(
+          `run ${ev.runId.slice(0, 8)} (${ev.mode}) started on ${ev.model}, session ${ev.sessionId}`,
+        );
         break;
       case 'toolCall':
         this.log(`-> ${ev.name} ${short(ev.args, 100)}`);
@@ -328,7 +391,9 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.statusModelOverride = ev.to;
         this.renderStatus();
         this.log(`fallback ${ev.from} -> ${ev.to}: ${ev.reason}`);
-        void vscode.window.showWarningMessage(`Temper: ${ev.from} failed (${short(ev.reason, 120)}) — switched to ${ev.to}`);
+        void vscode.window.showWarningMessage(
+          `Temper: ${ev.from} failed (${short(ev.reason, 120)}) — switched to ${ev.to}`,
+        );
         break;
       case 'retry':
         this.log(`retry ${ev.model} #${ev.attempt} in ${ev.delayMs} ms: ${short(ev.reason, 120)}`);
@@ -337,7 +402,10 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.statusModelOverride = undefined;
         this.renderStatus();
         this.log(`run ended: ${ev.status}${ev.message ? ` (${short(ev.message, 200)})` : ''}`);
-        if (ev.status === 'error') void vscode.window.showErrorMessage(`Temper: ${short(ev.message ?? 'The run failed.', 300)}`);
+        if (ev.status === 'error')
+          void vscode.window.showErrorMessage(
+            `Temper: ${short(ev.message ?? 'The run failed.', 300)}`,
+          );
         break;
       default:
         break;
@@ -346,7 +414,12 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
 
   notify(kind: 'info' | 'warn' | 'error', text: string): void {
     this.log(`${kind}: ${text}`);
-    const fn = kind === 'error' ? vscode.window.showErrorMessage : kind === 'warn' ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
+    const fn =
+      kind === 'error'
+        ? vscode.window.showErrorMessage
+        : kind === 'warn'
+          ? vscode.window.showWarningMessage
+          : vscode.window.showInformationMessage;
     void fn(`Temper: ${text}`);
   }
 
@@ -367,12 +440,20 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       why === 'cancelled'
         ? `Temper stopped. ${hunkCount} proposed change${hunkCount === 1 ? '' : 's'} were not applied.`
         : `Temper finished without submitting ${hunkCount} proposed change${hunkCount === 1 ? '' : 's'}. Nothing was applied.`;
-    const choice = await vscode.window.showInformationMessage(msg, 'Review partial changes', 'Discard');
+    const choice = await vscode.window.showInformationMessage(
+      msg,
+      'Review partial changes',
+      'Discard',
+    );
     return choice === 'Review partial changes';
   }
 
   async confirm(text: string, okLabel: string): Promise<boolean> {
-    const choice = await vscode.window.showWarningMessage(`Temper: ${text}`, { modal: true }, okLabel);
+    const choice = await vscode.window.showWarningMessage(
+      `Temper: ${text}`,
+      { modal: true },
+      okLabel,
+    );
     return choice === okLabel;
   }
 
@@ -423,12 +504,18 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.engine?.setBudget(msg.tokens > 0 ? msg.tokens : undefined);
         break;
       case 'models.reorder':
-        void vscode.workspace.getConfiguration('temper').update('models.chain', msg.chain, vscode.ConfigurationTarget.Global);
+        void vscode.workspace
+          .getConfiguration('temper')
+          .update('models.chain', msg.chain, vscode.ConfigurationTarget.Global);
         break;
       case 'models.pick':
         void vscode.workspace
           .getConfiguration('temper')
-          .update(msg.mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit', msg.name, vscode.ConfigurationTarget.Global);
+          .update(
+            msg.mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit',
+            msg.name,
+            vscode.ConfigurationTarget.Global,
+          );
         break;
       case 'review.decide':
         this.controller.decide(msg.hunkId, msg.decision);
@@ -471,7 +558,10 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
 
   private requireConnection(): boolean {
     if (!this.connection.state.connected) {
-      this.notify('error', `TrueForge is not reachable at ${this.baseUrl}. Start it and try again.`);
+      this.notify(
+        'error',
+        `TrueForge is not reachable at ${this.baseUrl}. Start it and try again.`,
+      );
       void this.connection.check();
       return false;
     }
@@ -480,10 +570,22 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
 
   async runAgent(text: string, mentions: Parameters<typeof composeAgentPrompt>[1]): Promise<void> {
     if (!text.trim() || !this.requireWorkspace() || !this.requireConnection()) {
-      this.send({ type: 'run.event', event: { kind: 'done', runId: 'none', status: 'error', message: 'Could not start the run.' } });
+      this.send({
+        type: 'run.event',
+        event: {
+          kind: 'done',
+          runId: 'none',
+          status: 'error',
+          message: 'Could not start the run.',
+        },
+      });
       return;
     }
-    await this.controller.start({ mode: 'agent', prompt: composeAgentPrompt(text, mentions), label: text });
+    await this.controller.start({
+      mode: 'agent',
+      prompt: composeAgentPrompt(text, mentions),
+      label: text,
+    });
   }
 
   async inlineEdit(): Promise<void> {
@@ -495,7 +597,11 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     const r = await promptInstruction(this.context.globalState, {
       model: this.modelView().inlineModel,
       onContinueInChat: (text, editor, range) => {
-        const sel = this.toEditorSelection(editor.document.uri, range.start.line + 1, range.end.line + 1);
+        const sel = this.toEditorSelection(
+          editor.document.uri,
+          range.start.line + 1,
+          range.end.line + 1,
+        );
         if (sel) void this.addSelectionToChat(sel, text);
       },
       onChangeModel: () => void this.selectModel('inline'),
@@ -513,9 +619,13 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   /** chat.send with mode 'edit': the inline flow with the instruction and range from the composer. */
   private async runEditFromChat(text: string, sel: EditorSelection | undefined): Promise<void> {
     const fail = (message: string) =>
-      this.send({ type: 'run.event', event: { kind: 'done', runId: 'none', status: 'error', message } });
+      this.send({
+        type: 'run.event',
+        event: { kind: 'done', runId: 'none', status: 'error', message },
+      });
     if (!sel) return fail('Edit mode needs a selection. Select code in the editor first.');
-    if (!text.trim() || !this.requireWorkspace() || !this.requireConnection()) return fail('Could not start the run.');
+    if (!text.trim() || !this.requireWorkspace() || !this.requireConnection())
+      return fail('Could not start the run.');
     if (this.controller.isRunning) return fail('A Temper run is already in progress.');
     const root = this.root;
     const abs = root ? path.resolve(root, sel.path) : '';
@@ -533,7 +643,11 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     await this.startInlineRun(sel, text.trim(), content);
   }
 
-  private async startInlineRun(sel: EditorSelection, instruction: string, content: string): Promise<void> {
+  private async startInlineRun(
+    sel: EditorSelection,
+    instruction: string,
+    content: string,
+  ): Promise<void> {
     const prompt = buildInlinePrompt({
       path: sel.path,
       instruction,
@@ -557,7 +671,11 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     return rel;
   }
 
-  private toEditorSelection(uri: vscode.Uri, startLine: number, endLine: number): EditorSelection | undefined {
+  private toEditorSelection(
+    uri: vscode.Uri,
+    startLine: number,
+    endLine: number,
+  ): EditorSelection | undefined {
     const rel = this.relativePath(uri);
     return rel ? { path: rel, startLine, endLine } : undefined;
   }
@@ -565,8 +683,15 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   private computeSelection(editor: vscode.TextEditor | undefined): EditorSelection | null {
     if (!editor) return null;
     const s = editor.selection;
-    const lines = selectionToLines({ startLine: s.start.line, startChar: s.start.character, endLine: s.end.line, endChar: s.end.character });
-    return (lines && this.toEditorSelection(editor.document.uri, lines.startLine, lines.endLine)) || null;
+    const lines = selectionToLines({
+      startLine: s.start.line,
+      startChar: s.start.character,
+      endLine: s.end.line,
+      endChar: s.end.character,
+    });
+    return (
+      (lines && this.toEditorSelection(editor.document.uri, lines.startLine, lines.endLine)) || null
+    );
   }
 
   private scheduleSelection(): void {
@@ -577,7 +702,15 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       if (!editor) return;
       const sel = this.computeSelection(editor);
       const prev = this.lastSelection;
-      if (prev === sel || (prev && sel && prev.path === sel.path && prev.startLine === sel.startLine && prev.endLine === sel.endLine)) return;
+      if (
+        prev === sel ||
+        (prev &&
+          sel &&
+          prev.path === sel.path &&
+          prev.startLine === sel.startLine &&
+          prev.endLine === sel.endLine)
+      )
+        return;
       this.lastSelection = sel;
       this.send({ type: 'editor.selection', selection: sel });
     }, 150);
@@ -612,7 +745,12 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       }
     }
     await vscode.commands.executeCommand('workbench.view.extension.temper');
-    const m: HostMessage = { type: 'composer.focus', selection: sel, mode: 'edit' as ComposerMode, ...(text ? { text } : {}) };
+    const m: HostMessage = {
+      type: 'composer.focus',
+      selection: sel,
+      mode: 'edit' as ComposerMode,
+      ...(text ? { text } : {}),
+    };
     if (this.postFn && this.webviewReady) this.send(m);
     else this.queued.push(m);
   }
@@ -638,11 +776,24 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     const view = this.modelView();
     const current = mode === 'agent' ? view.agentModel : view.inlineModel;
     const pick = await vscode.window.showQuickPick(
-      models.map((m) => ({ label: m.name, description: m.name === current ? 'current' : m.provider, detail: m.contextLength ? `${m.contextLength.toLocaleString()} token context` : undefined })),
-      { title: `Temper: select the model for ${mode === 'agent' ? 'agent' : 'inline edit'} mode`, placeHolder: current || 'Choose a model' },
+      models.map((m) => ({
+        label: m.name,
+        description: m.name === current ? 'current' : m.provider,
+        detail: m.contextLength ? `${fmtTokens(m.contextLength)} token context` : undefined,
+      })),
+      {
+        title: `Temper: select the model for ${mode === 'agent' ? 'agent' : 'inline edit'} mode`,
+        placeHolder: current || 'Choose a model',
+      },
     );
     if (!pick) return;
-    await vscode.workspace.getConfiguration('temper').update(mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit', pick.label, vscode.ConfigurationTarget.Global);
+    await vscode.workspace
+      .getConfiguration('temper')
+      .update(
+        mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit',
+        pick.label,
+        vscode.ConfigurationTarget.Global,
+      );
   }
 
   async openSession(): Promise<void> {
