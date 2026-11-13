@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/brand/readme-banner.png" alt="Temper: the coding agent that asks before it writes" width="100%"></p>
+
 # Temper
 
 A VS Code coding agent that edits across your project while you review every change hunk by hunk. The agent loop runs on a local [TrueForge](https://www.npmjs.com/package/@truefoundry/trueforge) server.

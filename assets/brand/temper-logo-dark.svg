@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="330" height="80" viewBox="0 0 330 80" role="img" aria-label="Temper">
+  <g transform="translate(0 4) scale(0.5625)"><rect width="128" height="128" rx="28" fill="#4F39F6"/>
+  <path d="M30 34a6 6 0 0 1 6-6h52l10 10v8a6 6 0 0 1-6 6H36a6 6 0 0 1-6-6z" fill="#FFFFFF"/>
+  <rect x="55" y="52" width="18" height="50" rx="5" fill="#FFFFFF"/>
+  <path d="M103 14l2.6 7.4L113 24l-7.4 2.6L103 34l-2.6-7.4L93 24l7.4-2.6z" fill="#C9C2FF"/></g>
+  <g transform="translate(92 6)"><g fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 9V44q0 8 8 8"/><path d="M0 22h14"/>
+    <path d="M23 37h28a14.5 15 0 1 0-4 10.5"/>
+    <path d="M61 52V22M61 31q0-9 8.5-9t8.5 9v21M78 31q0-9 8.5-9t8.5 9v21"/>
+    <path d="M106 22v43"/><ellipse cx="120.5" cy="37" rx="14.5" ry="15"/>
+    <path d="M145 37h28a14.5 15 0 1 0-4 10.5"/>
+    <path d="M184 52V22M184 34q0-12 14-12"/>
+  </g></g>
+</svg>

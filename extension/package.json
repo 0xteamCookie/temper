@@ -4,6 +4,7 @@
   "description": "A safety-first coding agent for VS Code, built on TrueForge.",
   "version": "0.1.0",
   "publisher": "temper",
+  "icon": "media/icon.png",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
