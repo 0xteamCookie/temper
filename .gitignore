@@ -29,3 +29,6 @@ Thumbs.db
 # tooling
 *.tsbuildinfo
 .vscode-test-web/
+
+# local agent worktrees
+.claude/worktrees/
