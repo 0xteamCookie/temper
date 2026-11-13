@@ -1,0 +1,40 @@
+{
+  "name": "temper-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Temper: a safety-first coding agent for VS Code, built on TrueForge.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xteamCookie/temper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0xteamCookie/temper/issues"
+  },
+  "homepage": "https://github.com/0xteamCookie/temper#readme",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "extension",
+    "extension/webview-ui"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "watch": "npm run watch --workspaces --if-present",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "package": "npm run build && npm run package --workspace extension"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2"
+  }
+}
