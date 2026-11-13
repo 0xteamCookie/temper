@@ -1,0 +1,110 @@
+import { describe, expect, it } from 'vitest';
+import { cssGhostContent, planDecorations, toRanges } from '../../src/inline/decorationModel';
+import { hunkAtLine, layoutHunk, layoutHunks } from '../../src/inline/hunkLayout';
+import { buildLenses, flagText, summarize } from '../../src/inline/lensModel';
+import { formatTitle, pushHistory } from '../../src/inline/instructionModel';
+import type { Hunk } from '../../src/shared/types';
+
+const hunk = (over: Partial<Hunk>): Hunk => ({
+  id: 'a.ts#0', path: 'a.ts', oldStart: 1, oldLines: 0, newStart: 1, newLines: 0, header: '', lines: [], flags: [], decision: 'pending', ...over,
+});
+
+const replace = hunk({
+  oldStart: 3, oldLines: 4, newStart: 3, newLines: 5,
+  lines: [' ctx', '-old1', '-old2', '+new1', '+new2', '+new3', ' tail'],
+});
+
+describe('layoutHunk', () => {
+  it('maps removed and added lines to 0-based document lines', () => {
+    const l = layoutHunk(replace);
+    expect(l.blocks).toHaveLength(1);
+    expect(l.blocks[0]).toMatchObject({ removed: [3, 4], added: ['new1', 'new2', 'new3'], anchorLine: 3, hostLine: 4 });
+    expect(l.firstLine).toBe(3);
+    expect(l.lastLine).toBe(4);
+  });
+  it('handles pure insertion (oldLines 0 => insert after oldStart)', () => {
+    const l = layoutHunk(hunk({ oldStart: 5, oldLines: 0, lines: ['+x', '+y'] }));
+    expect(l.blocks[0]).toMatchObject({ removed: [], added: ['x', 'y'], anchorLine: 5, hostLine: 4 });
+  });
+  it('splits blocks at context lines and applies lineOffset', () => {
+    const l = layoutHunk(hunk({ oldStart: 1, oldLines: 4, lines: ['-a', ' b', '-c', '+C', ' d'] }), 10);
+    expect(l.blocks.map((b) => b.removed)).toEqual([[10], [12]]);
+  });
+  it('ignores "no newline" markers', () => {
+    const l = layoutHunk(hunk({ oldStart: 1, oldLines: 1, lines: ['-a', '\\ No newline at end of file', '+b'] }));
+    expect(l.blocks[0]?.added).toEqual(['b']);
+  });
+  it('hunkAtLine picks containing or nearest hunk', () => {
+    const ls = layoutHunks([replace, hunk({ id: 'a.ts#1', oldStart: 20, oldLines: 1, lines: ['-z'] })]);
+    expect(hunkAtLine(ls, 4)).toBe('a.ts#0');
+    expect(hunkAtLine(ls, 18)).toBe('a.ts#1');
+    expect(hunkAtLine([], 1)).toBeUndefined();
+  });
+});
+
+describe('planDecorations', () => {
+  const layouts = layoutHunks([replace]);
+  it('pending: red removed + ghost', () => {
+    const p = planDecorations(layouts, { 'a.ts#0': 'pending' });
+    expect(p.removedPending).toEqual([3, 4]);
+    expect(p.ghosts[0]).toMatchObject({ hostLine: 4, state: 'pending' });
+  });
+  it('accept and reject move lines to their own buckets', () => {
+    expect(planDecorations(layouts, { 'a.ts#0': 'accept' }).removedAccepted).toEqual([3, 4]);
+    const r = planDecorations(layouts, { 'a.ts#0': 'reject' });
+    expect(r.keptRejected).toEqual([3, 4]);
+    expect(r.ghosts[0]?.state).toBe('reject');
+  });
+  it('toRanges merges contiguous lines', () => {
+    expect(toRanges([5, 1, 2, 2, 3])).toEqual([[1, 3], [5, 5]]);
+  });
+  it('cssGhostContent escapes quotes/backslashes and joins with \\A', () => {
+    const s = cssGhostContent(['a "q"', 'b\\c\td'], '+');
+    expect(s).toContain('\\"q\\"');
+    expect(s).toContain('\\\\');
+    expect(s).toContain('\\A ');
+    expect(s).not.toContain('\t');
+  });
+});
+
+describe('buildLenses', () => {
+  const flagged = hunk({ ...replace, flags: [{ kind: 'outsideSelection', detail: '' }], rationale: 'because' });
+  const layouts = layoutHunks([flagged]);
+  it('top lens, per-hunk lenses, flag and rationale', () => {
+    const ls = buildLenses('u', [flagged], layouts, { 'a.ts#0': 'pending' }, 100);
+    const titles = ls.map((l) => l.title);
+    expect(titles).toContain('✓ Accept All');
+    expect(titles).toContain('✗ Reject All');
+    expect(titles).toContain('✓ Accept (Ctrl+Alt+Y)');
+    expect(titles).toContain('✗ Reject (Ctrl+Alt+N)');
+    expect(titles.some((t) => t.includes('outside selection — rejected by default'))).toBe(true);
+    expect(titles).toContain('Why: because');
+    expect(ls.find((l) => l.title.startsWith('✓ Accept ('))?.args).toEqual(['u', 'a.ts#0']);
+  });
+  it('decided hunks show state + undo instead of accept/reject', () => {
+    const titles = buildLenses('u', [flagged], layouts, { 'a.ts#0': 'accept' }, 100).map((l) => l.title);
+    expect(titles).toContain('✓ Accepted');
+    expect(titles).toContain('↺ Undo decision');
+    expect(titles).not.toContain('✓ Accept (Ctrl+Alt+Y)');
+  });
+  it('clamps lens lines to document and is empty without hunks', () => {
+    expect(buildLenses('u', [], [], {}, 5)).toEqual([]);
+    expect(Math.max(...buildLenses('u', [flagged], layouts, {}, 2).map((l) => l.line))).toBe(1);
+  });
+  it('summarize / flagText', () => {
+    expect(summarize({ a: 'accept', b: 'reject', c: 'pending' })).toEqual({ pending: 1, accepted: 1, rejected: 1 });
+    expect(flagText({ kind: 'unknownSymbol', symbols: ['foo'], suggestions: {} })).toContain('foo');
+  });
+});
+
+describe('instruction model', () => {
+  it('title uses en dash for ranges', () => {
+    expect(formatTitle(3, 9)).toBe('Temper: edit selection (Lines 3–9)');
+    expect(formatTitle(4, 4)).toBe('Temper: edit selection (Line 4)');
+  });
+  it('history dedupes, trims, caps', () => {
+    expect(pushHistory(['a', 'b'], ' b ')).toEqual(['b', 'a']);
+    expect(pushHistory(['a'], '  ')).toEqual(['a']);
+    expect(pushHistory(['a', 'b', 'c'], 'd', 3)).toEqual(['d', 'a', 'b']);
+  });
+});
