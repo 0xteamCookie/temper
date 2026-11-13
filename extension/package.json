@@ -75,6 +75,61 @@
         "command": "temper.selectModel",
         "title": "Select Model",
         "category": "Temper"
+      },
+      {
+        "command": "temper.openSession",
+        "title": "Open Session in TrueForge",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.showLog",
+        "title": "Show Log",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.acceptHunk",
+        "title": "Accept Hunk",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.rejectHunk",
+        "title": "Reject Hunk",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.resetHunk",
+        "title": "Reset Hunk Decision",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.acceptAll",
+        "title": "Accept All Hunks",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.rejectAll",
+        "title": "Reject All Hunks",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.openSideBySide",
+        "title": "Open Side-by-Side Diff",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.acceptAtCursor",
+        "title": "Accept Hunk at Cursor",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.rejectAtCursor",
+        "title": "Reject Hunk at Cursor",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.inline.cancel",
+        "title": "Dismiss Inline Diff",
+        "category": "Temper"
       }
     ],
     "keybindings": [
@@ -83,6 +138,23 @@
         "key": "ctrl+alt+k",
         "mac": "cmd+alt+k",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "temper.inline.acceptAtCursor",
+        "key": "ctrl+alt+y",
+        "mac": "cmd+alt+y",
+        "when": "temper.inlineDiffActive && editorTextFocus"
+      },
+      {
+        "command": "temper.inline.rejectAtCursor",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n",
+        "when": "temper.inlineDiffActive && editorTextFocus"
+      },
+      {
+        "command": "temper.inline.cancel",
+        "key": "escape",
+        "when": "temper.inlineDiffActive && editorTextFocus && !suggestWidgetVisible"
       }
     ],
     "configuration": {
@@ -240,6 +312,46 @@
           "markdownDescription": "Show the Context Ledger in the Temper panel."
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "temper.inline.acceptHunk",
+          "when": "false"
+        },
+        {
+          "command": "temper.inline.rejectHunk",
+          "when": "false"
+        },
+        {
+          "command": "temper.inline.resetHunk",
+          "when": "false"
+        },
+        {
+          "command": "temper.inline.acceptAll",
+          "when": "temper.inlineDiffActive"
+        },
+        {
+          "command": "temper.inline.rejectAll",
+          "when": "temper.inlineDiffActive"
+        },
+        {
+          "command": "temper.inline.openSideBySide",
+          "when": "temper.inlineDiffActive"
+        },
+        {
+          "command": "temper.inline.acceptAtCursor",
+          "when": "temper.inlineDiffActive"
+        },
+        {
+          "command": "temper.inline.rejectAtCursor",
+          "when": "temper.inlineDiffActive"
+        },
+        {
+          "command": "temper.inline.cancel",
+          "when": "temper.inlineDiffActive"
+        }
+      ]
     }
   },
   "scripts": {

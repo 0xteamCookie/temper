@@ -1,32 +1,45 @@
 import * as vscode from 'vscode';
+import { TemperHost } from './host/temperHost';
+import { registerInlineDiff } from './inline';
 import { TemperPanelProvider } from './panel';
-
-const STUB_COMMANDS = [
-  'temper.inlineEdit',
-  'temper.cancel',
-  'temper.undoLastChange',
-  'temper.selectModel',
-] as const;
+import { registerReviewProviders } from './review';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new TemperPanelProvider(context.extensionUri);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(TemperPanelProvider.viewType, provider),
-  );
+  const host = new TemperHost(context);
+  const provider = new TemperPanelProvider(context.extensionUri, host);
 
-  for (const command of STUB_COMMANDS) {
+  const cmd = (id: string, fn: (...args: never[]) => unknown) =>
     context.subscriptions.push(
-      vscode.commands.registerCommand(command, () => {
-        void vscode.window.showInformationMessage(`Temper: ${command} is not implemented yet.`);
+      vscode.commands.registerCommand(id, async (...args: unknown[]) => {
+        try {
+          await (fn as (...a: unknown[]) => unknown)(...args);
+        } catch (e) {
+          void vscode.window.showErrorMessage(`Temper: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }),
     );
-  }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('temper.openPanel', () =>
-      vscode.commands.executeCommand('workbench.view.extension.temper'),
-    ),
+    host,
+    vscode.window.registerWebviewViewProvider(TemperPanelProvider.viewType, provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    registerReviewProviders(),
+    registerInlineDiff(),
   );
+
+  cmd('temper.openPanel', () => vscode.commands.executeCommand('workbench.view.extension.temper'));
+  cmd('temper.cancel', () => host.cancel());
+  cmd('temper.undoLastChange', () => host.undoLast());
+  cmd('temper.selectModel', () => host.selectModel());
+  cmd('temper.inlineEdit', () => host.inlineEdit());
+  cmd('temper.openSession', () => host.openSession());
+  cmd('temper.showLog', () => host.showLog());
+
+  // Never block activation on TrueForge or the tool server.
+  void host.init().catch((e) => {
+    void vscode.window.showErrorMessage(`Temper failed to start: ${e instanceof Error ? e.message : String(e)}`);
+  });
 }
 
 export function deactivate(): void {}
