@@ -1,5 +1,7 @@
 # secrets
 .env
+.secrets/
+*.serviceaccount.json
 .env.*
 !.env.example
 
