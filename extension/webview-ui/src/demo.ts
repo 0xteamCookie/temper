@@ -2,6 +2,7 @@
 // Replays a scripted run so every UI section is visible (`npm run dev`).
 import type { FileChange, Hunk, LedgerEntry, LedgerSnapshot, ModelInfo, RunEvent } from '../../src/shared/types';
 import type { EditorSelection } from '../../src/shared/messages';
+import type { SessionSummary, TranscriptTurn } from '../../src/shared/sessions';
 import type { HostMessage, Mention, WebviewMessage } from './vscode';
 import { setMockHandler } from './vscode';
 
@@ -89,6 +90,106 @@ const changes: FileChange[] = [
   ] },
 ];
 
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+const SESSIONS: SessionSummary[] = [
+  {
+    id: 's-demo-1',
+    title: 'Make get_debug_flag honour FLASK_DEBUG=0 and add a test',
+    createdAt: ago(40),
+    updatedAt: ago(3),
+    turns: 3,
+    model: 'anthropic/claude-sonnet',
+  },
+  { id: 's-demo-2', title: null, createdAt: ago(300), updatedAt: ago(240), turns: 1 },
+  {
+    id: 's-demo-3',
+    title: 'Rename Config.get_namespace to get_section across the repo',
+    createdAt: ago(3000),
+    updatedAt: ago(2900),
+    turns: 5,
+    model: 'openai/gpt-5',
+  },
+  {
+    id: 's-demo-4',
+    title: 'Why does the CLI swallow ImportError when loading the app?',
+    createdAt: ago(9000),
+    updatedAt: ago(8990),
+    turns: 2,
+  },
+  {
+    id: 's-demo-5',
+    title: 'Add a deprecation warning to the old session interface',
+    createdAt: ago(30000),
+    updatedAt: ago(29900),
+    turns: 4,
+  },
+];
+const PAGE = 3;
+
+function demoTurns(): TranscriptTurn[] {
+  const mk = (
+    turnId: string,
+    user: string,
+    text: string,
+    tool?: [string, unknown, string],
+  ): TranscriptTurn => {
+    const events: RunEvent[] = [
+      {
+        kind: 'runStart',
+        runId: turnId,
+        mode: 'agent',
+        model: 'anthropic/claude-sonnet',
+        sessionId: 's-demo-1',
+      },
+    ];
+    if (tool) {
+      events.push({
+        kind: 'toolCall',
+        runId: turnId,
+        threadId: T,
+        id: `${turnId}-t`,
+        name: tool[0],
+        args: tool[1],
+      });
+      events.push({
+        kind: 'toolResult',
+        runId: turnId,
+        threadId: T,
+        id: `${turnId}-t`,
+        content: tool[2],
+        isError: false,
+      });
+    }
+    events.push({ kind: 'text', runId: turnId, threadId: T, delta: text });
+    events.push({
+      kind: 'done',
+      runId: turnId,
+      status: 'done',
+      metrics: { inputTokens: 9100, outputTokens: 420, toolCalls: tool ? 1 : 0, durationMs: 8200 },
+    });
+    return { turnId, user, events };
+  };
+  return [
+    mk(
+      'd1',
+      'Make get_debug_flag honour FLASK_DEBUG=0',
+      'Done: unset now returns False and 0/false/no are handled.',
+      ['read_file', { path: 'src/flask/helpers.py' }, 'def get_debug_flag(): ...'],
+    ),
+    mk(
+      'd2',
+      'Now add a regression test for it',
+      'Added tests/test_debug_flag.py with a FLASK_DEBUG=0 case.',
+      ['grep', { pattern: 'get_debug_flag' }, 'tests/test_helpers.py:12'],
+    ),
+    mk(
+      'd3',
+      'Does the docs page mention the old behaviour?',
+      'No. docs/config.rst only lists the variable name.',
+    ),
+  ];
+}
+
 let timers: number[] = [];
 const at = (ms: number, fn: () => void) => void timers.push(window.setTimeout(fn, ms));
 const T = 'main';
@@ -141,6 +242,18 @@ export function replay(
 export function reset(): void {
   stop();
   window.dispatchEvent(new CustomEvent('temper-dev-reset'));
+}
+
+/** Dev bar: restore a past session straight into the chat, as a panel reload would. */
+export function loadSession(notice?: string): void {
+  stop();
+  send({
+    type: 'session.loaded',
+    sessionId: 's-demo-1',
+    turns: demoTurns(),
+    ...(notice ? { notice } : {}),
+  });
+  send({ type: 'session.current', sessionId: 's-demo-1' });
 }
 
 export function toggleSelection(): void {
@@ -205,6 +318,29 @@ function handle(m: WebviewMessage): void {
       send({ type: 'checkpoints.update', canUndo: true, lastLabel: 'FLASK_DEBUG fix' });
       ev({ kind: 'status', runId, status: 'running' });
       at(500, () => ev({ kind: 'done', runId, status: 'done', metrics: { inputTokens: 12400, outputTokens: 860, toolCalls: 4, durationMs: 14200 } }));
+      break;
+    case 'history.list': {
+      const start = m.pageToken ? Number(m.pageToken) : 0;
+      const slice = SESSIONS.slice(start, start + PAGE);
+      const more = start + PAGE < SESSIONS.length;
+      at(300, () =>
+        send({
+          type: 'history.page',
+          sessions: slice,
+          nextPageToken: more ? String(start + PAGE) : undefined,
+          append: !!m.pageToken,
+        }),
+      );
+      break;
+    }
+    case 'session.load':
+      at(200, () => {
+        send({ type: 'session.loaded', sessionId: m.id, turns: demoTurns() });
+        send({ type: 'session.current', sessionId: m.id });
+      });
+      break;
+    case 'session.new':
+      send({ type: 'session.current', sessionId: undefined });
       break;
     case 'undo.last':
       send({ type: 'checkpoints.update', canUndo: false });

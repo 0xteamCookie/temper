@@ -21,6 +21,7 @@ function selLabel(s: EditorSelection): string {
 
 export function Composer({
   running,
+  reviewPending,
   suggestions,
   selection,
   focus,
@@ -33,6 +34,8 @@ export function Composer({
   onManageModels,
 }: {
   running: boolean;
+  /** A review is open: a new message would cancel the paused turn, so sending waits. */
+  reviewPending: boolean;
   suggestions?: { query: string; items: Mention[] };
   selection: EditorSelection | null;
   focus?: ComposerFocus;
@@ -130,7 +133,7 @@ export function Composer({
     });
   };
 
-  const canSend = !!text.trim() && !running && (mode !== 'edit' || !!effective);
+  const canSend = !!text.trim() && !running && !reviewPending && (mode !== 'edit' || !!effective);
 
   const send = () => {
     const t = text.trim();
@@ -319,7 +322,13 @@ export function Composer({
               type="submit"
               className="send"
               aria-label="Send"
-              title={mode === 'edit' && !effective ? 'Select code first' : 'Send (Enter)'}
+              title={
+                reviewPending
+                  ? 'Finish the review before sending'
+                  : mode === 'edit' && !effective
+                    ? 'Select code first'
+                    : 'Send (Enter)'
+              }
               disabled={!canSend}
             >
               <Icon name="arrow-up" />
@@ -327,7 +336,13 @@ export function Composer({
           )}
         </div>
       </div>
-      <div className="composer-hint muted">Enter to send · Shift+Enter new line · Esc to stop</div>
+      <div className="composer-hint muted">
+        {running
+          ? 'Wait for this run to finish, or stop it, before sending a follow-up'
+          : reviewPending
+            ? 'Finish the review before sending a follow-up'
+            : 'Enter to send · Shift+Enter new line · Esc to stop'}
+      </div>
     </form>
   );
 }

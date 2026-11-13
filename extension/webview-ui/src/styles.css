@@ -661,3 +661,67 @@ kbd {
 
 .devbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 12px; border-top: 1px dashed var(--t-border); font-size: 11px; }
 .devbar select { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, var(--t-border)); }
+
+/* ------------------------------ history ------------------------------ */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 4px;
+  background: var(--t-surface);
+  border: 1px solid var(--t-border);
+  border-radius: 4px;
+}
+.session-row:hover {
+  border-color: var(--t-accent);
+}
+.session-row.current {
+  background: var(--t-accent-soft);
+  border-color: var(--t-accent);
+}
+.session-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+.session-open:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.session-title {
+  max-width: 100%;
+  font-weight: 600;
+}
+.session-meta {
+  max-width: 100%;
+  font-size: 11px;
+}
+.session-current {
+  flex: none;
+}
+.session-more {
+  align-self: flex-start;
+}
+.session-notice {
+  margin: 8px 12px 0;
+}
