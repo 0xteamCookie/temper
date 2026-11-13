@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ModelHealth, ModelInfo } from '../../../src/shared/types';
+import { fmtTokens } from '../../../src/shared/format';
 import { postToHost } from '../vscode';
 
 /* ------------------------------ icons ------------------------------ */
@@ -107,7 +108,6 @@ export function summarizeArgs(args: unknown, max = 60): string {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
-import { fmtTokens } from '../../../src/shared/format';
 export { fmtTokens };
 
 const HEALTH_TONE: Record<ModelHealth, 'ok' | 'bad' | 'unknown'> = {

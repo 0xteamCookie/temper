@@ -1,6 +1,10 @@
 # Configuration
 
-Model provisioning is split into four layers, each with one job:
+The primary way to add a model provider is the **Providers** screen in the Temper panel (Models view): keys are typed into a VS Code prompt, models are discovered and picked there, and the result is saved straight into TrueForge. Nothing in this folder is needed for that.
+
+## Headless / CI setup
+
+For CI and scripted setups, model provisioning is split into four layers, each with one job:
 
 1. **Secrets** - `.env` (git-ignored, template in `.env.example`). API keys and environment-specific endpoints/ids only. No model lists.
 2. **Discovery** - `scripts/register-providers.mjs` asks each enabled provider for the models your key can actually use (Anthropic, Gemini, OpenRouter, Groq, TrueFoundry, Ollama). Vertex AI has no simple list, so the policy's curated ids are probed instead. Well-known providers are enriched from TrueForge's catalog (context length, output limit, reasoning efforts).

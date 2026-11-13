@@ -7,6 +7,7 @@ import type {
   RunEvent,
   RunMetrics,
 } from '../../src/shared/types';
+import type { ProviderPanelState } from '../../src/shared/providers';
 
 export type RunStatus = 'running' | 'paused' | 'done' | 'error' | 'cancelled';
 
@@ -95,6 +96,7 @@ export interface State {
   chain: string[];
   agentModel: string;
   inlineModel: string;
+  providers: ProviderPanelState;
   review?: ReviewState;
   canUndo: boolean;
   undoLabel?: string;
@@ -111,6 +113,7 @@ export const initialState: State = {
   chain: [],
   agentModel: '',
   inlineModel: '',
+  providers: { rows: [], busy: null },
   canUndo: false,
   seq: 0,
 };
@@ -300,6 +303,7 @@ export function reducer(state: State, a: Action): State {
         chain: state.chain,
         agentModel: state.agentModel,
         inlineModel: state.inlineModel,
+        providers: state.providers,
         selection: state.selection,
       };
     case 'decide':
@@ -331,6 +335,8 @@ function reduceHost(state: State, m: HostMessage): State {
       return { ...state, ledger: m.snapshot };
     case 'models.update':
       return { ...state, models: m.models, chain: m.chain, agentModel: m.agentModel, inlineModel: m.inlineModel };
+    case 'providers.state':
+      return { ...state, providers: m.state };
     case 'review.open':
       return { ...state, review: { runId: m.runId, changes: m.changes }, view: 'review' };
     case 'review.closed': {

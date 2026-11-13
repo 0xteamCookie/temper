@@ -100,6 +100,9 @@ export function App() {
             chain={state.chain}
             agentModel={state.agentModel}
             inlineModel={state.inlineModel}
+            connected={state.connection.trueforge !== 'disconnected'}
+            detail={state.connection.detail}
+            providers={state.providers}
             onChain={(chain) => dispatch({ t: 'localChain', chain })}
             onPick={(mode, name) => dispatch({ t: 'localPick', mode, name })}
           />

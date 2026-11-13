@@ -60,13 +60,7 @@ From a clean clone. Commands are for bash; the PowerShell equivalents are noted.
    npm run build
    ```
 
-2. Add your provider keys. Fill in only the providers you will use; blank ones are skipped.
-
-   ```bash
-   cp .env.example .env          # PowerShell: Copy-Item .env.example .env
-   ```
-
-3. Start TrueForge locally. The script runs `npx -y @truefoundry/trueforge@0.185.0` with `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` (required so TrueForge may reach Temper's MCP server on localhost) and a SQLite file in `.trueforge/`. The first start downloads the package and can take 60 to 90 seconds.
+2. Start TrueForge locally. The script runs `npx -y @truefoundry/trueforge@0.185.0` with `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` (required so TrueForge may reach Temper's MCP server on localhost) and a SQLite file in `.trueforge/`. The first start downloads the package and can take 60 to 90 seconds.
 
    ```bash
    scripts/start-trueforge.sh    # PowerShell: .\scripts\start-trueforge.ps1
@@ -74,16 +68,34 @@ From a clean clone. Commands are for bash; the PowerShell equivalents are noted.
 
    To run it by hand instead: set `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` and run `npx @truefoundry/trueforge@0.185.0`. It listens on `http://127.0.0.1:8790`. `scripts/stop-trueforge.sh` (or `.ps1`) stops the one the script started.
 
-4. Register your models with TrueForge (details in [Models and fallback](#models-and-fallback)).
+3. Run the extension. Open the folder in VS Code, press `F5`, and pick **Run Temper Extension**. In the Extension Development Host, open the Temper view from the activity bar. Temper connects to TrueForge on its own.
 
-   ```bash
-   node scripts/register-providers.mjs --check   # validate keys, read-only
-   node scripts/register-providers.mjs           # discover and register
-   ```
+4. Add a model provider from the Providers screen (below), then optionally open the project you want to work on in that window, or set up the Flask demo (see [Reproducing the Round 1 tasks](#reproducing-the-round-1-tasks)).
 
-5. Run the extension. Open the folder in VS Code, press `F5`, and pick **Run Temper Extension**. In the Extension Development Host, open the Temper view from the activity bar. Temper connects to TrueForge on its own.
+### Add a provider in the editor
 
-6. Optional: open the project you want to work on in that window, or set up the Flask demo (see [Reproducing the Round 1 tasks](#reproducing-the-round-1-tasks)).
+Open the Temper panel, then **Models** (the gear icon in the header). The **Providers** section lists OpenAI, Anthropic, Google Gemini, Fireworks, Together, Moonshot, Z.ai, Alibaba and an **OpenAI-compatible** entry for Ollama, LM Studio, OpenRouter, Groq and gateways.
+
+- **Add key** asks for the key in a VS Code password prompt (never in the webview), lists the models that key can use, lets you tick the ones to keep (tool-capable models are preselected) and saves the provider into TrueForge. Temper stores no key anywhere: not in settings, not in SecretStorage, not in logs. Only TrueForge holds it.
+- **Edit** changes the models or rotates the key. Leave the key empty to keep the one TrueForge already has.
+- **Check** confirms TrueForge serves the provider's models and, if you paste the key, that the provider's model list accepts it. It never calls a model.
+- **Remove** deletes the provider (and its stored key) from TrueForge after a confirmation.
+
+If TrueForge is not running, the Models view offers **Start TrueForge** (runs `scripts/start-trueforge` in a terminal when the script is in the workspace; otherwise it copies `npx @truefoundry/trueforge@0.185.0`) and **Retry**. Below the providers you can set the agent and inline models and reorder the fallback chain.
+
+Temper only calls a provider's model-list endpoint, to show what is available. All inference goes through TrueForge.
+
+### Headless / CI setup
+
+Without the editor (CI, scripted demos), put keys in `.env` and run the script, which discovers models, applies [config/providers.json](config/providers.json) and registers them in TrueForge:
+
+```bash
+cp .env.example .env          # PowerShell: Copy-Item .env.example .env
+node scripts/register-providers.mjs --check   # validate keys, read-only
+node scripts/register-providers.mjs           # discover and register
+```
+
+Details in [Models and fallback](#models-and-fallback) and [config/README.md](config/README.md).
 
 ### Agent definitions
 
@@ -133,7 +145,7 @@ All settings are under `temper.*`. API keys never go in settings.
 
 ## Models and fallback
 
-Model setup has four layers, each with one job:
+In the editor, use the Providers screen (see [Add a provider in the editor](#add-a-provider-in-the-editor)). The rest of this section describes the headless path, `.env` plus the script, which has four layers, each with one job:
 
 1. **Secrets.** `.env` (git-ignored; template in [.env.example](.env.example)) holds API keys and endpoint URLs only.
 2. **Discovery.** `scripts/register-providers.mjs` asks each configured provider which models your key can use.

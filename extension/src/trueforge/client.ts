@@ -123,7 +123,9 @@ export class TrueForgeClient implements TrueForgeClientLike {
 
   async health(): Promise<{ ok: boolean; error?: string }> {
     try {
-      const { status } = await this.http('GET', '/api/v1/models');
+      // /healthz is the server's liveness probe; older builds without it fall back to the models list.
+      let { status } = await this.http('GET', '/healthz');
+      if (status === 404) ({ status } = await this.http('GET', '/api/v1/models'));
       return status >= 200 && status < 300 ? { ok: true } : { ok: false, error: `HTTP ${status}` };
     } catch (e) {
       return { ok: false, error: errText(e) };
