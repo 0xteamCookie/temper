@@ -44,6 +44,8 @@ export class SandboxSetup {
         ...this.state,
         loaded: true,
         connected: status.s.connected,
+        ready: status.s.ready,
+        environment: status.s.environment,
         skills: status.s.skills,
         error: undefined,
       };

@@ -72,9 +72,32 @@ describe('SandboxAdmin', () => {
     );
     expect(await admin.status()).toEqual({
       connected: false,
+      ready: false,
+      environment: undefined,
       skills: { enabled: false, reason: 'Skills run in a sandbox' },
       manifest: undefined,
     });
+  });
+
+  it('keeps the key as connected but not ready when the environment build failed', async () => {
+    const admin = new SandboxAdmin(
+      'http://tf',
+      fakeFetch({
+        'GET /api/v1/settings/sandbox-providers': {
+          status: 200,
+          body: { data: { manifest: { type: 'daytona', auth: { api_key: '***REDACTED***' } } } },
+        },
+        'GET /api/v1/capabilities': { status: 200, body: { data: { sandbox: { enabled: false }, skill: { enabled: false } } } },
+        'GET /api/v1/sandbox-environments': {
+          status: 200,
+          body: { data: [{ is_default: true, status: 'failed', status_reason: 'API key is missing required permissions' }] },
+        },
+      }),
+    );
+    const s = await admin.status();
+    expect(s.connected).toBe(true);
+    expect(s.ready).toBe(false);
+    expect(s.environment).toEqual({ status: 'failed', reason: 'API key is missing required permissions' });
   });
 
   it('reports connected with the redacted manifest', async () => {

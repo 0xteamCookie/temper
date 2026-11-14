@@ -63,7 +63,7 @@ function summaries(state: State, s: SettingsSnapshot): Record<SettingsPage, stri
     context: contextSummary(s),
     safety: `${REVIEW_LABEL[s.review.mode]}, scope fence ${FENCE_LABEL[s.guards.scopeFence]}`,
     pricing: s.pricing.fetch ? 'Prices from models.dev' : 'Bundled prices only',
-    sandbox: !state.sandbox.loaded ? 'Optional' : state.sandbox.connected ? 'Connected' : 'Not connected',
+    sandbox: sandboxSummary(state.sandbox),
     connection: connected ? `Connected${state.server?.version ? `, v${state.server.version}` : ''}` : 'Not connected',
   };
 }
@@ -301,6 +301,13 @@ function PricingPage({ s }: { s: SettingsSnapshot }) {
   );
 }
 
+function sandboxSummary(sb: SandboxState): string {
+  if (!sb.loaded) return 'Optional';
+  if (!sb.connected) return 'Not connected';
+  if (sb.ready) return 'Ready';
+  return sb.environment?.status === 'failed' ? 'Setup failed' : 'Preparing';
+}
+
 function SandboxPage({ sb, connected }: { sb: SandboxState; connected: boolean }) {
   const r = sb.result;
   return (
@@ -319,8 +326,21 @@ function SandboxPage({ sb, connected }: { sb: SandboxState; connected: boolean }
                 <span className="muted">Checking…</span>
               ) : sb.error ? (
                 <StatusLine tone="bad">Could not load: {sb.error}</StatusLine>
+              ) : sb.connected && sb.ready ? (
+                <StatusLine tone="ok">Ready (Daytona)</StatusLine>
+              ) : sb.connected && sb.environment?.status === 'failed' ? (
+                <>
+                  <StatusLine tone="bad">Key saved, but the sandbox image failed to build</StatusLine>
+                  {sb.environment.reason && <div className="muted small">{sb.environment.reason}</div>}
+                  {/permission/i.test(sb.environment.reason ?? '') && (
+                    <div className="muted small">
+                      Create a Daytona key with write:sandboxes, write:snapshots and delete:snapshots, then use Replace
+                      key.
+                    </div>
+                  )}
+                </>
               ) : sb.connected ? (
-                <StatusLine tone="ok">Connected (Daytona)</StatusLine>
+                <StatusLine tone="muted">Key saved, preparing the sandbox image…</StatusLine>
               ) : (
                 <StatusLine tone="muted">Not connected</StatusLine>
               )}

@@ -49,8 +49,12 @@ export function buildSandboxManifest(apiKey: string, existing?: unknown): Sandbo
 }
 
 export interface SandboxStatus {
-  /** A sandbox provider is configured. */
+  /** A sandbox provider (key) is saved in TrueForge. */
   connected: boolean;
+  /** TrueForge can actually run sandboxes: its environment image is built. */
+  ready: boolean;
+  /** The default sandbox environment's build status (pending, building, ready, failed), when one exists. */
+  environment?: { status: string; reason?: string };
   skills?: { enabled: boolean; reason?: string };
   /** Manifest as returned by TrueForge (key redacted), when configured. */
   manifest?: unknown;
@@ -114,22 +118,38 @@ export class SandboxAdmin {
 
   async status(): Promise<SandboxStatus> {
     const manifest = await this.get();
-    let connected = manifest !== undefined;
+    const connected = manifest !== undefined;
+    let ready = false;
     let skills: SandboxStatus['skills'];
+    let environment: SandboxStatus['environment'];
     try {
       const { status, json } = await this.call('GET', '/api/v1/capabilities');
       if (status === 200) {
         const d = obj(obj(json).data);
-        const sb = obj(d.sandbox);
-        if (typeof sb.enabled === 'boolean') connected = sb.enabled;
+        ready = obj(d.sandbox).enabled === true;
         const sk = obj(d.skill);
         if (typeof sk.enabled === 'boolean')
           skills = { enabled: sk.enabled, ...(typeof sk.reason === 'string' ? { reason: sk.reason } : {}) };
       }
     } catch {
-      /* capabilities are advisory; the manifest already tells us whether it is configured */
+      /* capabilities are advisory */
     }
-    return { connected, skills, manifest };
+    if (connected) {
+      try {
+        const { status, json } = await this.call('GET', '/api/v1/sandbox-environments');
+        const list = obj(json).data;
+        if (status === 200 && Array.isArray(list)) {
+          const env = obj(list.find((e) => obj(e).is_default === true) ?? list[0]);
+          if (typeof env.status === 'string') {
+            const reason = typeof env.status_reason === 'string' ? scrubSecrets(env.status_reason, this.secrets()) : '';
+            environment = { status: env.status, ...(reason ? { reason: reason.slice(0, 300) } : {}) };
+          }
+        }
+      } catch {
+        /* the environment list is advisory */
+      }
+    }
+    return { connected, ready, environment, skills, manifest };
   }
 
   /** TrueForge version from /healthz, or undefined. */

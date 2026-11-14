@@ -34,8 +34,12 @@ export interface ServerInfo {
 /** Sandbox (Daytona) status as reported by TrueForge. No key ever reaches the webview. */
 export interface SandboxState {
   loaded: boolean;
-  /** TrueForge reports a configured sandbox provider. */
+  /** A Daytona key is saved in TrueForge. */
   connected: boolean;
+  /** TrueForge can run sandboxes (its environment image is built). */
+  ready?: boolean;
+  /** Default sandbox environment build status and TrueForge's reason, e.g. a Daytona permission error. */
+  environment?: { status: string; reason?: string };
   skills?: { enabled: boolean; reason?: string };
   busy: boolean;
   result?: { level: 'info' | 'error'; text: string };
