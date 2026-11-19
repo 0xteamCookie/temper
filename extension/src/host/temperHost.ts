@@ -416,9 +416,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     // The ledger's own budget control keeps a workspace override that would mask this setting.
     if (key === 'context.budgetTokens') await this.context.workspaceState.update(BUDGET_KEY, check.value);
     try {
-      await vscode.workspace
-        .getConfiguration('temper')
-        .update(key, check.value, vscode.ConfigurationTarget.Global);
+      await saveSetting(key, check.value);
     } catch (e) {
       this.notify('error', `Could not save temper.${key}: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -658,18 +656,10 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
         this.engine?.setBudget(msg.tokens > 0 ? msg.tokens : undefined);
         break;
       case 'models.reorder':
-        void vscode.workspace
-          .getConfiguration('temper')
-          .update('models.chain', msg.chain, vscode.ConfigurationTarget.Global);
+        void saveSetting('models.chain', msg.chain);
         break;
       case 'models.pick':
-        void vscode.workspace
-          .getConfiguration('temper')
-          .update(
-            msg.mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit',
-            msg.name,
-            vscode.ConfigurationTarget.Global,
-          );
+        void saveSetting(msg.mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit', msg.name);
         break;
       case 'review.decide':
         this.controller.decide(msg.hunkId, msg.decision);
@@ -960,13 +950,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       { title: `Temper: select the model for ${mode === 'agent' ? 'agent' : 'inline edit'} mode`, placeHolder: current || 'Choose a model' },
     );
     if (!pick) return;
-    await vscode.workspace
-      .getConfiguration('temper')
-      .update(
-        mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit',
-        pick.label,
-        vscode.ConfigurationTarget.Global,
-      );
+    await saveSetting(mode === 'agent' ? 'models.agentMode' : 'models.inlineEdit', pick.label);
   }
 
   async openSession(sessionId?: string): Promise<void> {
@@ -994,4 +978,18 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     this.status.dispose();
     this.out.dispose();
   }
+}
+
+/**
+ * Save a temper.* setting where it takes effect. A value in workspace or folder settings overrides
+ * user settings, so writing to user settings alone would silently change nothing; update the most
+ * specific scope that already defines the key, else user settings.
+ */
+export async function saveSetting(key: string, value: unknown): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration('temper');
+  const i = cfg.inspect(key);
+  // In a single-folder window, folder settings are the workspace settings.
+  const inWorkspace = i?.workspaceFolderValue !== undefined || i?.workspaceValue !== undefined;
+  const target = inWorkspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+  await cfg.update(key, value, target);
 }
