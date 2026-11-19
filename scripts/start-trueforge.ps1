@@ -26,6 +26,8 @@ if (Test-Ready) {
 }
 
 # Only 127.0.0.1 may be registered as an outbound MCP/provider host (exact-host match).
+# Bind to IPv4 explicitly: TrueForge's default HOST=localhost can resolve to ::1.
+$env:HOST = '127.0.0.1'
 $env:OUTBOUND_URL_ALLOWED_HOSTS = '["127.0.0.1"]'
 $env:SQLITE_PATH = Join-Path $StateDir 'trueforge.db'
 

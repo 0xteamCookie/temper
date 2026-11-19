@@ -14,16 +14,16 @@ A safety-first coding agent for VS Code. Its agent loop runs on [TrueForge](http
 2. Temper starts TrueForge for you. If nothing is listening on `http://127.0.0.1:8790`, it runs the pinned release (`npx -y @truefoundry/trueforge@0.185.0`) as a background process with the settings it needs, keeps its data in VS Code's extension storage, shows its log in the **Temper** output channel and stops it when VS Code closes. The first start downloads the package and can take a minute or two. Set `temper.trueforge.autoStart` to `false` to manage TrueForge yourself.
 3. Open **Settings → Providers**, add a provider and its key, and pick a model. The key is sent to TrueForge, which stores it; Temper keeps no copy.
 
-If you start TrueForge yourself, Temper uses it as is. Set `OUTBOUND_URL_ALLOWED_HOSTS` so it can reach Temper's MCP server on localhost:
+If you start TrueForge yourself, Temper uses it as is. Set `HOST` (TrueForge's default, `localhost`, resolves to `::1` on many Linux systems) and `OUTBOUND_URL_ALLOWED_HOSTS` (so it can reach Temper's MCP server):
 
 ```powershell
 # PowerShell
-$env:OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'; npx -y @truefoundry/trueforge@0.185.0
+$env:HOST='127.0.0.1'; $env:OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'; npx -y @truefoundry/trueforge@0.185.0
 ```
 
 ```sh
 # bash / zsh
-OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]' npx -y @truefoundry/trueforge@0.185.0
+HOST=127.0.0.1 OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]' npx -y @truefoundry/trueforge@0.185.0
 ```
 
 ## Using Temper

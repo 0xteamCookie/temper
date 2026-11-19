@@ -17,6 +17,8 @@ if curl -fs -o /dev/null "$URL"; then
 fi
 
 # Only 127.0.0.1 may be registered as an outbound MCP/provider host (exact-host match).
+# Bind to IPv4 explicitly: TrueForge's default HOST=localhost resolves to ::1 on many Linux systems.
+export HOST=127.0.0.1
 export OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'
 export SQLITE_PATH="$STATE_DIR/trueforge.db"
 

@@ -26,10 +26,21 @@ const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 
 /** Only a local URL can be served by a process we start. */
 export function localPort(baseUrl: string): number | undefined {
+  return localTarget(baseUrl)?.port;
+}
+
+/**
+ * Host and port to bind a local TrueForge to. TrueForge binds to HOST (default "localhost"),
+ * which resolves to ::1 on many Linux systems; bind to the exact address the URL names so the
+ * server and Temper always agree.
+ */
+export function localTarget(baseUrl: string): { host: string; port: number } | undefined {
   try {
     const u = new URL(baseUrl);
     if (!LOCAL_HOSTS.has(u.hostname)) return undefined;
-    return u.port ? Number(u.port) : u.protocol === 'https:' ? 443 : 80;
+    const host = u.hostname === 'localhost' ? '127.0.0.1' : u.hostname.replace(/^\[|\]$/g, '');
+    const port = u.port ? Number(u.port) : u.protocol === 'https:' ? 443 : 80;
+    return { host, port };
   } catch {
     return undefined;
   }
@@ -79,22 +90,22 @@ export class TrueForgeServer {
       this.set(this.proc ? 'running' : 'external');
       return this._state;
     }
-    const port = localPort(this.opts.baseUrl());
-    if (port === undefined) {
+    const target = localTarget(this.opts.baseUrl());
+    if (target === undefined) {
       this.set('failed', `TrueForge is not reachable at ${this.opts.baseUrl()}, and Temper only starts TrueForge for a local URL.`);
       return this._state;
     }
-    if (!this.proc) this.launch(port);
+    if (!this.proc) this.launch(target.host, target.port);
     if (this._state === 'failed') return this._state;
     return this.waitReady();
   }
 
-  private launch(port: number): void {
+  private launch(host: string, port: number): void {
     const dir = this.opts.storageDir;
     mkdirSync(dir, { recursive: true });
     const win = process.platform === 'win32';
     const args = ['-y', `@truefoundry/trueforge@${TRUEFORGE_VERSION}`, '--port', String(port)];
-    this.opts.log(`starting TrueForge ${TRUEFORGE_VERSION} on port ${port} (data: ${dir})`);
+    this.opts.log(`starting TrueForge ${TRUEFORGE_VERSION} on ${host}:${port} (data: ${dir})`);
     this.set('starting');
     // npx is a .cmd shim on Windows, which Node only runs through a shell; pass one command
     // string there (every part is a constant or an integer port, so nothing needs escaping).
@@ -103,6 +114,7 @@ export class TrueForgeServer {
       cwd: dir,
       env: {
         ...process.env,
+        HOST: host,
         OUTBOUND_URL_ALLOWED_HOSTS: OUTBOUND_HOSTS,
         SQLITE_PATH: path.join(dir, 'trueforge.db'),
       },

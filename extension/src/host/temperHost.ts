@@ -940,9 +940,13 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     if (!st.connected) {
       await this.connection.check();
     }
+    if (!this.connection.state.connected) {
+      this.notify('warn', `TrueForge is not reachable at ${this.baseUrl}. See the Temper output for its log.`);
+      return;
+    }
     const models = this.connection.state.models;
     if (models.length === 0) {
-      this.notify('warn', 'TrueForge reports no models. Add a model provider in TrueForge first.');
+      this.notify('warn', 'TrueForge reports no models. Add a provider in Temper: Settings → Providers.');
       return;
     }
     const view = this.modelView();

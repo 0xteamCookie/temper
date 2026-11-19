@@ -8,11 +8,11 @@ describe('trueforgeCommand', () => {
 
   it('sets the outbound host list for PowerShell on Windows', () => {
     expect(trueforgeCommand('win32')).toBe(
-      `$env:OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'; ${TRUEFORGE_NPX}`,
+      `$env:HOST='127.0.0.1'; $env:OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'; ${TRUEFORGE_NPX}`,
     );
   });
 
   it('sets the outbound host list inline on POSIX shells', () => {
-    expect(trueforgeCommand('darwin')).toBe(`OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]' ${TRUEFORGE_NPX}`);
+    expect(trueforgeCommand('darwin')).toBe(`HOST=127.0.0.1 OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]' ${TRUEFORGE_NPX}`);
   });
 });

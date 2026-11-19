@@ -70,13 +70,13 @@ From a clean clone. Commands are for bash; the PowerShell equivalents are noted.
    npm run build
    ```
 
-2. Start TrueForge locally. You can skip this step: when Temper activates and nothing answers on `temper.trueforge.baseUrl`, it starts the pinned TrueForge itself as a background process (`npx -y @truefoundry/trueforge@0.185.0 --port 8790`, with `OUTBOUND_URL_ALLOWED_HOSTS` set and its database in VS Code's extension storage), streams its log to the **Temper** output channel and stops it when VS Code closes. Turn this off with `temper.trueforge.autoStart`. To run it yourself instead, use the script, which runs `npx -y @truefoundry/trueforge@0.185.0` with `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` (required so TrueForge may reach Temper's MCP server on localhost) and a SQLite file in `.trueforge/`. The first start downloads the package and can take 60 to 90 seconds.
+2. Start TrueForge locally. You can skip this step: when Temper activates and nothing answers on `temper.trueforge.baseUrl`, it starts the pinned TrueForge itself as a background process (`npx -y @truefoundry/trueforge@0.185.0 --port 8790`, with `HOST=127.0.0.1` and `OUTBOUND_URL_ALLOWED_HOSTS` set and its database in VS Code's extension storage), streams its log to the **Temper** output channel and stops it when VS Code closes. Turn this off with `temper.trueforge.autoStart`. To run it yourself instead, use the script, which runs `npx -y @truefoundry/trueforge@0.185.0` with `HOST=127.0.0.1` and `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` (required so TrueForge may reach Temper's MCP server on localhost) and a SQLite file in `.trueforge/`. The first start downloads the package and can take 60 to 90 seconds.
 
    ```bash
    scripts/start-trueforge.sh    # PowerShell: .\scripts\start-trueforge.ps1
    ```
 
-   To run it by hand instead: set `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` and run `npx @truefoundry/trueforge@0.185.0`. It listens on `http://127.0.0.1:8790`. `scripts/stop-trueforge.sh` (or `.ps1`) stops the one the script started.
+   To run it by hand instead: set `HOST=127.0.0.1` (TrueForge's default, `localhost`, resolves to `::1` on many Linux systems, where Temper cannot reach it) and `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'`, then run `npx @truefoundry/trueforge@0.185.0`. It listens on `http://127.0.0.1:8790`. `scripts/stop-trueforge.sh` (or `.ps1`) stops the one the script started.
 
 3. Run the extension. Open the folder in VS Code, press `F5`, and pick **Run Temper Extension**. In the Extension Development Host, open the Temper view from the activity bar. Temper connects to TrueForge on its own.
 

@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { localPort, TrueForgeServer } from '../../src/trueforge/server';
+import { localPort, localTarget, TrueForgeServer } from '../../src/trueforge/server';
 
 function fakeProc() {
   const p = new EventEmitter() as EventEmitter & {
@@ -45,6 +45,12 @@ describe('localPort', () => {
     expect(localPort('https://trueforge.example.com')).toBeUndefined();
     expect(localPort('not a url')).toBeUndefined();
   });
+
+  it('binds to an explicit address, never the name localhost (::1 on many Linux systems)', () => {
+    expect(localTarget('http://127.0.0.1:8790')).toEqual({ host: '127.0.0.1', port: 8790 });
+    expect(localTarget('http://localhost:8790')).toEqual({ host: '127.0.0.1', port: 8790 });
+    expect(localTarget('http://[::1]:8790')).toEqual({ host: '::1', port: 8790 });
+  });
 });
 
 describe('TrueForgeServer', () => {
@@ -65,6 +71,7 @@ describe('TrueForgeServer', () => {
 
     const [cmd, args, opts] = spawnFn.mock.calls[0] as unknown as [string, string[], { env: NodeJS.ProcessEnv }];
     expect([cmd, ...args].join(' ')).toMatch(/^npx(\.cmd)? -y @truefoundry\/trueforge@0\.185\.0 --port 8790$/);
+    expect(opts.env.HOST).toBe('127.0.0.1');
     expect(opts.env.OUTBOUND_URL_ALLOWED_HOSTS).toBe('["127.0.0.1"]');
     expect(opts.env.SQLITE_PATH).toMatch(/trueforge\.db$/);
     expect(logs).toContain('[trueforge] listening on 8790');

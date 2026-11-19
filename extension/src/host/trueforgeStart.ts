@@ -6,6 +6,6 @@ export const OUTBOUND_HOSTS = '["127.0.0.1"]';
 /** The start command for the user's shell, with the outbound-host setting Temper needs. */
 export function trueforgeCommand(platform: NodeJS.Platform = process.platform): string {
   return platform === 'win32'
-    ? `$env:OUTBOUND_URL_ALLOWED_HOSTS='${OUTBOUND_HOSTS}'; ${TRUEFORGE_NPX}`
-    : `OUTBOUND_URL_ALLOWED_HOSTS='${OUTBOUND_HOSTS}' ${TRUEFORGE_NPX}`;
+    ? `$env:HOST='127.0.0.1'; $env:OUTBOUND_URL_ALLOWED_HOSTS='${OUTBOUND_HOSTS}'; ${TRUEFORGE_NPX}`
+    : `HOST=127.0.0.1 OUTBOUND_URL_ALLOWED_HOSTS='${OUTBOUND_HOSTS}' ${TRUEFORGE_NPX}`;
 }
