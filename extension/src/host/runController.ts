@@ -128,7 +128,7 @@ function reviewFiles(cs: { files(): FileChange[] }): FileChange[] {
 export class RunController {
   active: ActiveRun | undefined;
   /** The agent-mode session the next message continues (TrueForge keeps its history). */
-  session: { id: string; model?: string } | undefined;
+  session: { id: string; model?: string; pick?: string } | undefined;
   private leftover: ChangesetStore | undefined;
   private readonly bridge: ApprovalBridge;
   private readonly router: ModelRouter;
@@ -170,7 +170,7 @@ export class RunController {
   }
 
   /** Continue `session` with the next agent message, or start a new chat when undefined. */
-  setSession(session: { id: string; model?: string } | undefined): void {
+  setSession(session: { id: string; model?: string; pick?: string } | undefined): void {
     this.session = session;
   }
 
@@ -263,7 +263,7 @@ export class RunController {
           run.turn = info;
           if (opts.mode !== 'agent') return;
           const isNew = info.sessionId !== this.session?.id;
-          this.session = { id: info.sessionId, model: info.model };
+          this.session = { id: info.sessionId, model: info.model, pick: isNew ? pick || undefined : this.session?.pick };
           this.deps.onSession?.({
             sessionId: info.sessionId,
             model: info.model,

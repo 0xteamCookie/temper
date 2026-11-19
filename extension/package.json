@@ -82,7 +82,12 @@
       },
       {
         "command": "temper.selectModel",
-        "title": "Select Model",
+        "title": "Select Agent Model",
+        "category": "Temper"
+      },
+      {
+        "command": "temper.selectInlineModel",
+        "title": "Select Inline Edit Model",
         "category": "Temper"
       },
       {

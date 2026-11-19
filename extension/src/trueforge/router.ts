@@ -42,7 +42,7 @@ export interface RunRequest {
    * Follow-up message: post the turn to this session on the first attempt (TrueForge keeps its history).
    * Falling back to another model starts a new session, since a session's model is fixed.
    */
-  session?: { id: string; model?: string };
+  session?: { id: string; model?: string; /** The user's pick when the session started. */ pick?: string };
   /** Called once per attempt as soon as the turn id is known; needed to send approvals via client.approve. */
   onTurn?: (info: { sessionId: string; turnId: string; model: string }) => void;
 }
@@ -134,6 +134,12 @@ export class ModelRouter {
     const spent: ModelUsage[] = [];
     const emit = (ev: RunEvent) => req.onEvent(ev.kind === 'done' ? withSpent(ev, spent) : ev);
     let models = this.order(req.pick);
+    // A session's model is fixed in TrueForge. If the user picked a different model since the session
+    // started, honour the pick with a new session rather than silently continuing on the old model.
+    // (A fallback inside the session does not count: the user's pick is unchanged.)
+    if (req.session && req.session.pick !== undefined && req.pick !== req.session.pick) {
+      req = { ...req, session: undefined };
+    }
     if (req.session) {
       const m = req.session.model;
       const first = m && models.includes(m) ? m : models[0];

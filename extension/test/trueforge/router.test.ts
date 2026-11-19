@@ -170,6 +170,24 @@ describe('ModelRouter', () => {
       expect(c.sessions).toHaveLength(1);
     });
 
+    it('starts a new session on the newly picked model when the user changed the pick', async () => {
+      const c = new FakeClient().script('a', okTurn('t1')).script('b', okTurn('t2'));
+      const r = make(c, ['a', 'b']);
+      await run(r, { pick: 'a' }).p;
+      const res = await run(r, { session: { id: 's1', model: 'a', pick: 'a' }, pick: 'b' }).p;
+      expect(res).toMatchObject({ status: 'done', model: 'b', sessionId: 's2' });
+      expect(c.sessions.map((x) => x.model)).toEqual(['a', 'b']);
+    });
+
+    it('keeps the session after an automatic fallback while the pick is unchanged', async () => {
+      const c = new FakeClient().script('b', okTurn('t1'), okTurn('t2'));
+      const r = make(c, ['a', 'b']);
+      await run(r, { pick: 'b' }).p; // creates s1 on b, standing in for a session that fell back to b
+      const res = await run(r, { session: { id: 's1', model: 'b', pick: 'a' }, pick: 'a' }).p;
+      expect(res).toMatchObject({ status: 'done', model: 'b', sessionId: 's1' });
+      expect(c.sessions).toHaveLength(1);
+    });
+
     it('starts a new session when falling back to another model', async () => {
       const c = new FakeClient()
         .script('a', okTurn('t1'), errorTurn(E401))

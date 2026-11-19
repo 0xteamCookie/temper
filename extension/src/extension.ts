@@ -32,7 +32,8 @@ export function activate(context: vscode.ExtensionContext): void {
   cmd('temper.addSelectionToChat', () => host.addSelectionToChat());
   cmd('temper.cancel', () => host.cancel());
   cmd('temper.undoLastChange', () => host.undoLast());
-  cmd('temper.selectModel', () => host.selectModel());
+  cmd('temper.selectModel', () => host.selectModel('agent'));
+  cmd('temper.selectInlineModel', () => host.selectModel('inline'));
   cmd('temper.inlineEdit', () => host.inlineEdit());
   cmd('temper.openSession', () => host.openSession());
   cmd('temper.newChat', () => host.navigate('newChat'));
