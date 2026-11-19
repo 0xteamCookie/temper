@@ -87,8 +87,8 @@ export function providersHandle(m: WebviewMessage): boolean {
         result: {
           scope: 'server',
           level: 'info',
-          text: 'The start script was not found in this workspace. The command below was copied.',
-          command: 'npx @truefoundry/trueforge@0.185.0',
+          text: 'Copied.',
+          command: "$env:OUTBOUND_URL_ALLOWED_HOSTS='[\"127.0.0.1\"]'; npx -y @truefoundry/trueforge@0.185.0",
         },
       };
       publish();

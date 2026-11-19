@@ -32,3 +32,7 @@ Thumbs.db
 
 # local agent worktrees
 .claude/worktrees/
+
+# copied in by `npm run package`
+extension/LICENSE
+extension/THIRD_PARTY_NOTICES.md

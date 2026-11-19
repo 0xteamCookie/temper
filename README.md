@@ -47,6 +47,16 @@ The extension never calls a model provider. It talks to TrueForge, and TrueForge
 - Python 3.10 or newer, only for the Flask demo project
 - At least one model provider key (Anthropic, Gemini, OpenRouter, Groq, Vertex AI, a TrueFoundry gateway) or a local Ollama
 
+## Install the prebuilt extension
+
+The fastest way to try Temper, with no build:
+
+1. Download `temper-0.1.0.vsix` from the [latest release](https://github.com/0xteamCookie/temper/releases/latest).
+2. In VS Code: **Extensions** view → **⋯** → **Install from VSIX…**, or `code --install-extension temper-0.1.0.vsix`.
+3. Open a project folder and the **Temper** view. Temper starts TrueForge for you (see below), then add a model provider from **Settings → Providers**.
+
+Node.js 22.14 or newer must be on your `PATH`, because Temper runs TrueForge through `npx`.
+
 ## Quickstart
 
 From a clean clone. Commands are for bash; the PowerShell equivalents are noted.
@@ -60,7 +70,7 @@ From a clean clone. Commands are for bash; the PowerShell equivalents are noted.
    npm run build
    ```
 
-2. Start TrueForge locally. The script runs `npx -y @truefoundry/trueforge@0.185.0` with `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` (required so TrueForge may reach Temper's MCP server on localhost) and a SQLite file in `.trueforge/`. The first start downloads the package and can take 60 to 90 seconds.
+2. Start TrueForge locally. You can skip this step: when Temper activates and nothing answers on `temper.trueforge.baseUrl`, it starts the pinned TrueForge itself as a background process (`npx -y @truefoundry/trueforge@0.185.0 --port 8790`, with `OUTBOUND_URL_ALLOWED_HOSTS` set and its database in VS Code's extension storage), streams its log to the **Temper** output channel and stops it when VS Code closes. Turn this off with `temper.trueforge.autoStart`. To run it yourself instead, use the script, which runs `npx -y @truefoundry/trueforge@0.185.0` with `OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'` (required so TrueForge may reach Temper's MCP server on localhost) and a SQLite file in `.trueforge/`. The first start downloads the package and can take 60 to 90 seconds.
 
    ```bash
    scripts/start-trueforge.sh    # PowerShell: .\scripts\start-trueforge.ps1
@@ -81,7 +91,7 @@ Open the Temper panel, then **Models** (the gear icon in the header). The **Prov
 - **Check** confirms TrueForge serves the provider's models and, if you paste the key, that the provider's model list accepts it. It never calls a model.
 - **Remove** deletes the provider (and its stored key) from TrueForge after a confirmation.
 
-If TrueForge is not running, the Models view offers **Start TrueForge** (runs `scripts/start-trueforge` in a terminal when the script is in the workspace; otherwise it copies `npx @truefoundry/trueforge@0.185.0`) and **Retry**. Below the providers you can set the agent and inline models and reorder the fallback chain.
+If TrueForge is not running (for example, auto-start is off or the first start failed), the panel offers **Start TrueForge**, which starts the same managed background process, and **Retry**. A TrueForge you started yourself is always used as is, and Temper never stops it. The script and the managed process keep separate databases (`.trueforge/` in the repo versus VS Code's extension storage), so providers added under one are not visible to the other. Below the providers you can set the agent and inline models and reorder the fallback chain.
 
 Temper only calls a provider's model-list endpoint, to show what is available. All inference goes through TrueForge.
 

@@ -1,9 +1,11 @@
 **
-!dist/**
+!dist/**/*.js
+!dist/**/*.css
+!dist/**/*.html
+!dist/**/*.ttf
 !media/**
 !package.json
 !README.md
 !LICENSE
 !NOTICE
 !THIRD_PARTY_NOTICES.md
-dist/**/*.map

@@ -27,7 +27,7 @@
     "test": "npm run test --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "package": "npm run build && npm run package --workspace extension"
+    "package": "npm run build && npm run package --workspace temper"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

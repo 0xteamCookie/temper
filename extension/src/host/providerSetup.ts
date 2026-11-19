@@ -1,8 +1,6 @@
 // In-editor provider setup (Cline/Roo style). Keys are typed into host-side VS Code input boxes, held in
 // memory only for the call, sent to the provider's model-LIST endpoint (discovery) and to TrueForge, and
 // never stored, logged or shown. Temper makes no inference call to any provider.
-import { existsSync } from 'node:fs';
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ProviderAdmin } from '../providers/admin';
 import type { ConfiguredProvider } from '../providers/admin';
@@ -20,9 +18,8 @@ import { buildRows, compareServed } from '../providers/rows';
 import { safeError } from '../providers/scrub';
 import type { HostMessage } from '../shared/messages';
 import type { ProviderPanelState, ProviderResult } from '../shared/providers';
-
-export const TRUEFORGE_VERSION = '0.185.0';
-export const TRUEFORGE_NPX = `npx @truefoundry/trueforge@${TRUEFORGE_VERSION}`;
+import type { ServerState } from '../trueforge/server';
+import { trueforgeCommand } from './trueforgeStart';
 
 export interface ProviderSetupDeps {
   extensionUri: vscode.Uri;
@@ -31,6 +28,8 @@ export interface ProviderSetupDeps {
   log(line: string): void;
   /** Re-check the TrueForge connection so the model list refreshes. */
   refreshConnection(): Promise<void>;
+  /** Make sure TrueForge is running, starting the managed process if needed. */
+  ensureServer(): Promise<ServerState>;
 }
 
 const isHttpUrl = (s: string) => /^https?:\/\/[^\s/]+/i.test(s);
@@ -380,48 +379,27 @@ export class ProviderSetup {
 
   /* ------------------------------- server ------------------------------- */
 
-  private findStartScript(): string | undefined {
-    const file = process.platform === 'win32' ? 'start-trueforge.ps1' : 'start-trueforge.sh';
-    const roots = [
-      ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
-      path.resolve(this.deps.extensionUri.fsPath, '..'),
-    ];
-    for (const r of roots) {
-      const p = path.join(r, 'scripts', file);
-      if (existsSync(p)) return p;
+  /** Start (or find) TrueForge through the extension-managed process, then refresh. */
+  async startServer(): Promise<void> {
+    this.finish('server', 'info', 'Starting TrueForge. The first start downloads it and can take a minute.');
+    const state = await this.deps.ensureServer();
+    if (state === 'running' || state === 'external') {
+      await this.deps.refreshConnection();
+      await this.refresh();
+      this.finish('server', 'info', 'TrueForge is running.');
     }
-    return undefined;
   }
 
-  async startServer(): Promise<void> {
-    const script = this.findStartScript();
-    if (!script) {
-      await vscode.env.clipboard.writeText(TRUEFORGE_NPX);
-      this.finish(
-        'server',
-        'info',
-        'The Temper start script was not found in this workspace. The command below was copied; run it in a terminal.',
-        TRUEFORGE_NPX,
-      );
-      return;
-    }
-    const win = process.platform === 'win32';
-    const term = vscode.window.createTerminal({
-      name: 'TrueForge',
-      cwd: path.dirname(path.dirname(script)),
-      ...(win ? { shellPath: 'powershell.exe' } : {}),
-    });
-    term.show(true);
-    term.sendText(win ? `& '${script}'` : `bash '${script}'`);
-    this.finish(
-      'server',
-      'info',
-      'Starting TrueForge in a terminal. The first start downloads the package and can take a minute. Press Retry when it is ready.',
-    );
+  /** Reflect the managed server's state in the panel. */
+  serverState(state: ServerState, error?: string): void {
+    if (state === 'starting')
+      this.finish('server', 'info', 'Starting TrueForge. The first start downloads it and can take a minute.');
+    else if (state === 'failed') this.finish('server', 'error', error ?? 'TrueForge could not be started.');
   }
 
   async copyCommand(): Promise<void> {
-    await vscode.env.clipboard.writeText(TRUEFORGE_NPX);
-    this.finish('server', 'info', 'Copied.', TRUEFORGE_NPX);
+    const cmd = trueforgeCommand();
+    await vscode.env.clipboard.writeText(cmd);
+    this.finish('server', 'info', 'Copied.', cmd);
   }
 }

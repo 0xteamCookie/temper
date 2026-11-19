@@ -12,6 +12,7 @@ import type { RunningMcpServer, TemperTool } from '../mcp';
 import { addToHistory, promptInstruction } from '../inline';
 import { selectionToLines } from '../inline/instructionModel';
 import { TrueForgeClient } from '../trueforge';
+import { TrueForgeServer } from '../trueforge/server';
 import type { AgentRef, AgentSpec, RawEvent, StreamOptions } from '../trueforge';
 import type {
   ComposerMode,
@@ -142,13 +143,20 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
     this.pricing = createPricingService(context, (l) => this.log(l));
     this.connection = new TrueForgeConnection(this.client);
     this.connection.onLog = (l) => this.log(l);
+    this.server = new TrueForgeServer({
+      baseUrl: () => this.baseUrl,
+      storageDir: path.join(context.globalStorageUri.fsPath, 'trueforge'),
+      log: (l) => this.log(l),
+    });
     this.providers = new ProviderSetup({
       extensionUri: context.extensionUri,
       getBaseUrl: () => this.baseUrl,
       post: (m) => this.send(m),
       log: (l) => this.log(l),
       refreshConnection: () => this.connection.check(),
+      ensureServer: () => this.server.ensure(),
     });
+    this.server.onState = (state, error) => this.providers.serverState(state, error);
     this.sandbox = new SandboxSetup({
       getBaseUrl: () => this.baseUrl,
       post: (m) => this.send(m),
@@ -238,6 +246,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
 
   private readonly workspace: ChangesetWorkspace;
   private readonly providers: ProviderSetup;
+  private readonly server: TrueForgeServer;
   private readonly sandbox: SandboxSetup;
 
   /* ------------------------------------------------------------------ */
@@ -326,6 +335,12 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
       }
     } else {
       this.log('no workspace folder is open; Temper needs one to run agents');
+    }
+    if (getSettings().trueforge.autoStart) {
+      // Start TrueForge in the background if nothing is listening; the connection poll picks it up.
+      void this.server.ensure().then((state) => {
+        if (state === 'running' || state === 'external') void this.connection.check().then(() => this.providers.refresh());
+      });
     }
     await this.connection.start();
   }
@@ -967,6 +982,7 @@ export class TemperHost implements PanelBackend, RunUi, vscode.Disposable {
   dispose(): void {
     if (this.selectionTimer) clearTimeout(this.selectionTimer);
     this.connection.stop();
+    this.server.stop();
     this.controller.dispose();
     this.editorReview.dispose();
     void this.mcp?.stop();

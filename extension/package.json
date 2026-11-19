@@ -199,6 +199,11 @@
           "default": "http://127.0.0.1:8790",
           "markdownDescription": "Base URL of the local TrueForge server (the server root, not `/api/v1`). Change this if you run TrueForge on a different port or host."
         },
+        "temper.trueforge.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Start TrueForge automatically when Temper activates and nothing is listening on `#temper.trueforge.baseUrl#` (local URLs only). Temper runs the pinned release with `npx`, keeps its data in VS Code's extension storage and stops it when VS Code closes. A TrueForge you started yourself is used as is."
+        },
         "temper.trueforge.agent": {
           "type": "string",
           "default": "",
@@ -453,7 +458,7 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "package": "vsce package --no-dependencies"
+    "package": "node -e \"for (const f of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) require('fs').copyFileSync('../' + f, f)\" && vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

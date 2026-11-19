@@ -9,6 +9,7 @@ export type SymbolCheckMode = 'bounceThenWarn' | 'bounce' | 'warn' | 'off';
 export interface TemperSettings {
   trueforge: {
     baseUrl: string;
+    autoStart: boolean;
     agent: string;
     inlineAgent: string;
   };
@@ -31,7 +32,7 @@ export interface TemperSettings {
 }
 
 export const DEFAULT_SETTINGS: Readonly<TemperSettings> = {
-  trueforge: { baseUrl: 'http://127.0.0.1:8790', agent: '', inlineAgent: '' },
+  trueforge: { baseUrl: 'http://127.0.0.1:8790', autoStart: true, agent: '', inlineAgent: '' },
   models: {
     chain: [],
     agentMode: '',
@@ -91,6 +92,7 @@ export function readSettings(reader: ConfigReader): TemperSettings {
   return {
     trueforge: {
       baseUrl: pick(reader, 'trueforge.baseUrl', d.trueforge.baseUrl),
+      autoStart: pick(reader, 'trueforge.autoStart', d.trueforge.autoStart),
       agent: pick(reader, 'trueforge.agent', d.trueforge.agent),
       inlineAgent: pick(reader, 'trueforge.inlineAgent', d.trueforge.inlineAgent),
     },
